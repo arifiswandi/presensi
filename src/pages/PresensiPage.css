@@ -1,0 +1,400 @@
+:root {
+  color: #0f172a;
+  background: #f3f7fb;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  background: #edf4fb;
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+.presensi-page {
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at top left, rgba(54, 103, 171, 0.12), transparent 25%),
+    radial-gradient(circle at bottom right, rgba(214, 182, 70, 0.12), transparent 22%),
+    linear-gradient(135deg, #f4f8fc 0%, #edf8f3 100%);
+  padding: 28px 24px 36px;
+  color: #102a43;
+}
+
+.presensi-shell {
+  max-width: 1280px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.presensi-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  background: linear-gradient(135deg, #102a43 0%, #0e4b7a 100%);
+  border-radius: 24px;
+  padding: 22px 24px;
+  box-shadow: 0 24px 50px rgba(16, 42, 67, 0.2);
+  position: relative;
+  overflow: hidden;
+}
+
+.presensi-topbar::before {
+  content: "";
+  position: absolute;
+  right: -28px;
+  top: -36px;
+  width: 200px;
+  height: 200px;
+  border-radius: 50%;
+  background: rgba(212, 167, 60, 0.14);
+}
+
+.presensi-brand,
+.presensi-actions {
+  position: relative;
+  z-index: 1;
+}
+
+.presensi-brand {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.presensi-logo {
+  width: 54px;
+  height: 54px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, #f1c45d, #dca72b);
+  color: #102a43;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 1.35rem;
+  box-shadow: 0 12px 20px rgba(212, 167, 60, 0.25);
+}
+
+.presensi-title {
+  margin: 0;
+  font-size: clamp(1.45rem, 2vw, 2.1rem);
+  line-height: 1.2;
+  color: #fff;
+}
+
+.presensi-subtitle {
+  display: block;
+  margin-top: 4px;
+  font-size: 0.78rem;
+  color: rgba(255, 255, 255, 0.78);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.presensi-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.presensi-user {
+  padding: 9px 14px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: #f8fafc;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.presensi-link-button,
+.presensi-logout,
+.presensi-mode-button,
+.presensi-mass-button,
+.presensi-option,
+.presensi-save-button {
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, filter 0.2s ease;
+}
+
+.presensi-link-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 16px;
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  text-decoration: none;
+  font-weight: 700;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+}
+
+.presensi-logout {
+  padding: 10px 16px;
+  background: linear-gradient(135deg, #d64545, #b42318);
+  color: #fff;
+  font-weight: 700;
+  box-shadow: 0 12px 24px rgba(212, 69, 69, 0.2);
+}
+
+.presensi-link-button:hover,
+.presensi-logout:hover,
+.presensi-mode-button:hover,
+.presensi-mass-button:hover,
+.presensi-option:hover,
+.presensi-save-button:hover {
+  transform: translateY(-1px);
+  filter: brightness(0.98);
+}
+
+.presensi-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(180px, 1fr));
+  gap: 18px;
+}
+
+.presensi-stat-card {
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  border-left: 5px solid #d4a73c;
+  border-radius: 20px;
+  padding: 18px 18px 16px;
+  box-shadow: 0 18px 35px rgba(15, 23, 42, 0.06);
+}
+
+.presensi-stat-label {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
+.presensi-stat-value {
+  display: block;
+  font-size: clamp(1.7rem, 2vw, 2.4rem);
+  color: #0f172a;
+  font-weight: 800;
+  line-height: 1.1;
+}
+
+.presensi-stat-meta {
+  display: inline-block;
+  margin-top: 8px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #0f766e;
+}
+
+.presensi-mode-switcher {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding-top: 8px;
+}
+
+.presensi-mode-button {
+  padding: 12px 18px;
+  background: rgba(232, 240, 255, 0.8);
+  color: #1f3b5d;
+  font-weight: 700;
+  border: 1px solid rgba(128, 154, 214, 0.2);
+}
+
+.presensi-mode-button.active {
+  background: linear-gradient(135deg, #1d4ed8, #2563eb);
+  color: #fff;
+  box-shadow: 0 12px 22px rgba(37, 99, 235, 0.2);
+}
+
+.presensi-panel {
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 24px;
+  box-shadow: 0 22px 40px rgba(15, 23, 42, 0.08);
+  padding: 24px 20px 18px;
+}
+
+.presensi-control-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(180px, 1fr));
+  gap: 18px;
+  margin-bottom: 18px;
+}
+
+.presensi-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.presensi-field label {
+  font-size: 0.8rem;
+  color: #475569;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+
+.presensi-field input,
+.presensi-field select {
+  width: 100%;
+  border: 1px solid #d9e0ea;
+  background: #fff;
+  color: #0f172a;
+  border-radius: 12px;
+  padding: 11px 12px;
+  outline: none;
+}
+
+.presensi-field input:focus,
+.presensi-field select:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
+}
+
+.presensi-mass-action {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 18px;
+  color: #334155;
+  font-weight: 700;
+}
+
+.presensi-mass-button {
+  padding: 9px 12px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.presensi-mass-button.hadir { background: #22c55e; }
+.presensi-mass-button.izin { background: #3b82f6; }
+.presensi-mass-button.sakit { background: #f59e0b; }
+.presensi-mass-button.alpha { background: #ef4444; }
+
+.presensi-table-wrap {
+  overflow-x: auto;
+  border-radius: 18px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+}
+
+.presensi-table-header {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 12px 16px 0;
+  color: #475569;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.presensi-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 720px;
+}
+
+.presensi-table th,
+.presensi-table td {
+  padding: 14px 16px;
+  border-bottom: 1px solid #e2e8f0;
+  text-align: left;
+  vertical-align: middle;
+}
+
+.presensi-table th {
+  background: #f8fafc;
+  color: #334155;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.presensi-table tbody tr:hover {
+  background: rgba(219, 234, 254, 0.22);
+}
+
+.presensi-table strong {
+  color: #102a43;
+}
+
+.presensi-option-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.presensi-option {
+  padding: 8px 10px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #1f2937;
+  background: #eef2ff;
+  border: 1px solid transparent;
+}
+
+.presensi-option.active {
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.8);
+  border-color: rgba(15, 23, 42, 0.06);
+}
+
+.presensi-status--hadir { background: #dcfce7 !important; color: #166534 !important; }
+.presensi-status--izin { background: #dbeafe !important; color: #1d4ed8 !important; }
+.presensi-status--sakit { background: #fef3c7 !important; color: #b45309 !important; }
+.presensi-status--alpha { background: #fee2e2 !important; color: #b91c1c !important; }
+
+.presensi-save-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 18px;
+}
+
+.presensi-save-button {
+  padding: 12px 18px;
+  background: linear-gradient(135deg, #0f172a, #1e293b);
+  color: #fff;
+  font-weight: 700;
+  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.15);
+}
+
+@media (max-width: 720px) {
+  .presensi-topbar {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .presensi-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .presensi-stats,
+  .presensi-control-row {
+    grid-template-columns: 1fr;
+  }
+
+  .presensi-panel {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+}

@@ -242,20 +242,27 @@ export default function PresensiDashboard({ user, onLogout }) {
                         </td>
                         <td>
                           <div className="presensi-option-group">
-                            {ATTENDANCE_OPTIONS.map((option) => (
-                              <button
-                                key={`${student.id}-${option}`}
-                                type="button"
-                                className={
-                                  student.status === option
-                                    ? `presensi-option active ${STATUS_CLASS_MAP[option]}`
-                                    : `presensi-option ${STATUS_CLASS_MAP[option]}`
-                                }
-                                onClick={() => handleUpdateStatus(student.id, option)}
-                              >
-                                {option}
-                              </button>
-                            ))}
+                            {ATTENDANCE_OPTIONS.map((option) => {
+                              const isSelected = student.status === option;
+
+                              return (
+                                <button
+                                  key={`${student.id}-${option}`}
+                                  type="button"
+                                  className={
+                                    isSelected
+                                      ? `presensi-option active ${STATUS_CLASS_MAP[option]}`
+                                      : `presensi-option ${STATUS_CLASS_MAP[option]}`
+                                  }
+                                  onClick={() => handleUpdateStatus(student.id, option)}
+                                >
+                                  <span className="presensi-option-inner">
+                                    {isSelected && <span className="presensi-option-check">✓</span>}
+                                    <span>{option}</span>
+                                  </span>
+                                </button>
+                              );
+                            })}
                           </div>
                         </td>
                       </tr>

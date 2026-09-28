@@ -374,23 +374,55 @@ select {
   font-size: 0.8rem;
   font-weight: 700;
   color: #1f2937;
-  background: #eef2ff;
-  border: 1px solid transparent;
+  background: #f1f5f9;
+  border: 1px solid #cbd5e1;
   border-radius: 8px;
   cursor: pointer;
   min-height: 32px;
   line-height: 1.2;
+  opacity: 0.8;
+  transition: all 0.2s ease;
+}
+
+.presensi-option-inner {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.presensi-option-check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.7);
+  font-size: 0.72rem;
+  line-height: 1;
+}
+
+.presensi-option:not(.active) {
+  box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.2);
 }
 
 .presensi-option.active {
-  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.8);
-  border-color: rgba(15, 23, 42, 0.06);
+  opacity: 1;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.9), 0 0 0 4px rgba(59, 130, 246, 0.18);
+  border-color: rgba(15, 23, 42, 0.14);
+  transform: translateY(-1px);
 }
 
 .presensi-status--hadir { background: #dcfce7 !important; color: #166534 !important; }
 .presensi-status--izin { background: #dbeafe !important; color: #1d4ed8 !important; }
 .presensi-status--sakit { background: #fef3c7 !important; color: #b45309 !important; }
 .presensi-status--alpha { background: #fee2e2 !important; color: #b91c1c !important; }
+
+.presensi-option:not(.active).presensi-status--hadir { background: #f0fdf4 !important; color: #166534 !important; }
+.presensi-option:not(.active).presensi-status--izin { background: #eff6ff !important; color: #1d4ed8 !important; }
+.presensi-option:not(.active).presensi-status--sakit { background: #fff7ed !important; color: #b45309 !important; }
+.presensi-option:not(.active).presensi-status--alpha { background: #fef2f2 !important; color: #b91c1c !important; }
 
 .presensi-save-row {
   display: flex;

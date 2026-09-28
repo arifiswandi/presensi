@@ -24,6 +24,9 @@ select {
   width: 100%;
   min-height: 100vh;
   max-width: 100vw;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
   overflow-x: hidden;
   background: #eaf1f5;
   padding: 30px 22px 32px;
@@ -32,7 +35,7 @@ select {
 
 .presensi-shell {
   max-width: 1280px;
-  width: 100%;
+  width: min(1280px, calc(100vw - 64px));
   margin: 0 auto;
   display: flex;
   flex-direction: column;

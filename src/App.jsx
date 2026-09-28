@@ -2,7 +2,7 @@ import React from 'react';
 import { HashRouter, Navigate, Route, Routes } from 'react-router-dom';
 import LoginPage from './pages/LoginPage';
 import AnekdotPage from './pages/AnekdotPage';
-import PresensiPage from './pages/PresensiPage';
+import { PresensiDashboard } from './features/presensi';
 import { postToGas } from './services/gasService';
 import { useStoredUser } from './hooks/useStoredUser';
 
@@ -19,7 +19,7 @@ export default function App() {
         />
         <Route
           path="/presensi"
-          element={user ? <PresensiPage user={user} onLogout={() => setUser(null)} /> : <Navigate to="/login" replace />}
+          element={user ? <PresensiDashboard user={user} onLogout={() => setUser(null)} /> : <Navigate to="/login" replace />}
         />
         <Route
           path="/anekdot"

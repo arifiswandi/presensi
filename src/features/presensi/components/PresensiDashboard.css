@@ -1,0 +1,611 @@
+:root {
+  color: #0f172a;
+  background: #f3f7fb;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  background: #edf4fb;
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+.presensi-page {
+  width: 100%;
+  min-height: 100vh;
+  max-width: 100vw;
+  overflow-x: hidden;
+  background: #eaf1f5;
+  padding: 30px 22px 32px;
+  color: #102a43;
+}
+
+.presensi-shell {
+  max-width: 1280px;
+  width: 100%;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.presensi-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  background: linear-gradient(135deg, #1d3f5b 0%, #213f5e 35%, #1d314c 100%);
+  border-radius: 18px;
+  padding: 18px 18px 18px 20px;
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.12);
+  position: relative;
+  overflow: hidden;
+}
+
+.presensi-topbar::before {
+  content: "";
+  position: absolute;
+  width: 180px;
+  height: 180px;
+  border-radius: 50%;
+  background: rgba(212, 167, 60, 0.14);
+  right: -24px;
+  top: -34px;
+}
+
+.presensi-brand,
+.presensi-actions {
+  position: relative;
+  z-index: 1;
+}
+
+.presensi-brand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.presensi-brand-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.presensi-logo {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #f2c86b, #d5a43a);
+  color: #0f172a;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 1.15rem;
+  box-shadow: 0 8px 18px rgba(212, 167, 60, 0.2);
+  flex-shrink: 0;
+}
+
+.presensi-title {
+  margin: 0;
+  font-size: clamp(2rem, 2.2vw, 3rem);
+  line-height: 1.12;
+  color: #ffffff;
+  letter-spacing: -0.04em;
+  font-weight: 800;
+}
+
+.presensi-subtitle {
+  display: block;
+  font-size: 0.74rem;
+  color: rgba(255, 255, 255, 0.76);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  line-height: 1.3;
+}
+
+.presensi-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  margin-left: auto;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.presensi-user {
+  padding: 10px 16px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: #f8fafc;
+  font-weight: 600;
+  font-size: 0.84rem;
+}
+
+.presensi-logout {
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  padding: 10px 18px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.presensi-mode-button,
+.presensi-mass-button,
+.presensi-option,
+.presensi-save-button,
+.presensi-logout {
+  transition: filter 0.2s ease, transform 0.2s ease;
+}
+
+.presensi-mode-button:hover,
+.presensi-mass-button:hover,
+.presensi-option:hover,
+.presensi-save-button:hover,
+.presensi-logout:hover {
+  transform: translateY(-1px);
+  filter: brightness(0.98);
+}
+
+.presensi-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(180px, 1fr));
+  gap: 18px;
+  margin-top: 0;
+}
+
+.presensi-stat-card {
+  background: rgba(255, 255, 255, 0.88);
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-left: 5px solid #d4a73c;
+  border-radius: 16px;
+  padding: 14px 18px 12px;
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.04);
+}
+
+.presensi-stat-label {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
+.presensi-stat-value {
+  display: block;
+  font-size: clamp(2.2rem, 2.3vw, 3rem);
+  color: #102a43;
+  font-weight: 800;
+  line-height: 1.1;
+}
+
+.presensi-stat-meta {
+  display: inline-block;
+  margin-top: 8px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #0f766e;
+}
+
+.presensi-mode-switcher {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 2px;
+}
+
+.presensi-mode-button {
+  padding: 12px 18px;
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid rgba(160, 174, 192, 0.22);
+  border-radius: 12px;
+  color: #1f3b5d;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.7);
+}
+
+.presensi-mode-button.active {
+  background: #dfeaff;
+  color: #1d4ed8;
+  box-shadow: inset 0 0 0 1px rgba(29, 78, 216, 0.12);
+  border-color: rgba(136, 170, 235, 0.38);
+}
+
+.presensi-panel {
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 18px;
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.04);
+  padding: 20px 20px 18px;
+}
+
+.presensi-control-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(180px, 1fr));
+  gap: 18px;
+  margin-bottom: 14px;
+}
+
+.presensi-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.presensi-field label {
+  font-size: 0.8rem;
+  color: #475569;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+
+.presensi-field input,
+.presensi-field select {
+  width: 100%;
+  appearance: none;
+  border: 1px solid #d9e0ea;
+  background: #fff;
+  color: #0f172a;
+  border-radius: 10px;
+  padding: 10px 12px;
+  outline: none;
+  font-size: 0.96rem;
+  min-height: 42px;
+  box-shadow: inset 0 1px 2px rgba(15,23,42,0.02);
+}
+
+.presensi-field input:focus,
+.presensi-field select:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
+}
+
+.presensi-mass-action {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+  color: #334155;
+  font-weight: 700;
+}
+
+.presensi-mass-label {
+  margin-right: 2px;
+}
+
+.presensi-mass-button {
+  padding: 8px 12px;
+  font-weight: 700;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  line-height: 1.2;
+}
+
+.presensi-mass-button.hadir {
+  background: #22c55e;
+}
+
+.presensi-mass-button.izin {
+  background: #3b82f6;
+}
+
+.presensi-table-wrap {
+  overflow-x: auto;
+  border-radius: 14px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.4);
+}
+
+.presensi-table-header {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 12px 14px 0;
+  color: #475569;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.presensi-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 740px;
+}
+
+.presensi-table th,
+.presensi-table td {
+  padding: 12px 14px;
+  border-bottom: 1px solid #e2e8f0;
+  text-align: left;
+  vertical-align: middle;
+}
+
+.presensi-table th {
+  background: #f8fafc;
+  color: #334155;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 700;
+}
+
+.presensi-table tbody tr:nth-child(even) {
+  background: rgba(248, 250, 252, 0.45);
+}
+
+.presensi-table strong {
+  color: #102a43;
+}
+
+.presensi-option-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.presensi-option {
+  padding: 6px 10px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #1f2937;
+  background: #eef2ff;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  cursor: pointer;
+  min-height: 32px;
+  line-height: 1.2;
+}
+
+.presensi-option.active {
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.8);
+  border-color: rgba(15, 23, 42, 0.06);
+}
+
+.presensi-status--hadir { background: #dcfce7 !important; color: #166534 !important; }
+.presensi-status--izin { background: #dbeafe !important; color: #1d4ed8 !important; }
+.presensi-status--sakit { background: #fef3c7 !important; color: #b45309 !important; }
+.presensi-status--alpha { background: #fee2e2 !important; color: #b91c1c !important; }
+
+.presensi-save-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 14px;
+}
+
+.presensi-save-button {
+  padding: 11px 18px;
+  background: linear-gradient(135deg, #0f172a, #1e293b);
+  color: #fff;
+  font-weight: 700;
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+  box-shadow: 0 10px 18px rgba(15, 23, 42, 0.12);
+}
+
+.presensi-rekap-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.presensi-rekap-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.presensi-rekap-eyebrow {
+  margin: 0 0 4px;
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #64748b;
+  font-weight: 700;
+}
+
+.presensi-rekap-title {
+  margin: 0;
+  font-size: 1.6rem;
+  color: #0f172a;
+}
+
+.presensi-rekap-period {
+  font-size: 0.82rem;
+  color: #475569;
+  font-weight: 700;
+}
+
+.presensi-rekap-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(160px, 1fr));
+  gap: 14px;
+}
+
+.presensi-rekap-card {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.presensi-rekap-card span {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #475569;
+  font-weight: 700;
+}
+
+.presensi-rekap-card strong {
+  font-size: 1.8rem;
+  line-height: 1.1;
+  color: #0f172a;
+}
+
+.presensi-rekap-card--hadir {
+  background: #ecfdf5;
+  border-color: rgba(34, 197, 94, 0.18);
+}
+
+.presensi-rekap-card--izin {
+  background: #eff6ff;
+  border-color: rgba(59, 130, 246, 0.18);
+}
+
+.presensi-rekap-card--alpha {
+  background: #fef2f2;
+  border-color: rgba(239, 68, 68, 0.18);
+}
+
+.presensi-rekap-table-wrap {
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.presensi-rekap-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.presensi-rekap-table th,
+.presensi-rekap-table td {
+  padding: 12px 14px;
+  border-bottom: 1px solid #e2e8f0;
+  text-align: left;
+}
+
+.presensi-rekap-table th {
+  background: #f8fafc;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #334155;
+}
+
+.presensi-rekap-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+@media (max-width: 768px) {
+  .presensi-page {
+    padding: 18px 12px 24px;
+  }
+
+  .presensi-shell {
+    gap: 14px;
+  }
+
+  .presensi-topbar {
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 18px 16px;
+  }
+
+  .presensi-brand {
+    width: 100%;
+  }
+
+  .presensi-actions {
+    width: 100%;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  .presensi-user {
+    font-size: 0.76rem;
+    padding: 8px 10px;
+  }
+
+  .presensi-stats,
+  .presensi-control-row,
+  .presensi-rekap-stats {
+    grid-template-columns: 1fr;
+  }
+
+  .presensi-panel {
+    padding: 18px 14px 14px;
+  }
+
+  .presensi-mass-action {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .presensi-mass-button,
+  .presensi-save-button,
+  .presensi-option {
+    width: 100%;
+  }
+
+  .presensi-option-group {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .presensi-table-wrap,
+  .presensi-rekap-table-wrap {
+    overflow-x: auto;
+  }
+
+  .presensi-table,
+  .presensi-rekap-table {
+    min-width: 680px;
+  }
+
+  .presensi-rekap-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+
+@media (max-width: 560px) {
+  .presensi-title {
+    font-size: 1.2rem;
+  }
+
+  .presensi-subtitle {
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  .presensi-mode-switcher {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .presensi-mode-button {
+    width: 100%;
+  }
+}

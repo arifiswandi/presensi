@@ -82,7 +82,7 @@ export default function PresensiDashboard({ user, onLogout }) {
             <div className="presensi-logo">M</div>
             <div className="presensi-brand-copy">
               <h1 className="presensi-title">Presensi & Rekap Bulanan</h1>
-              <span className="presensi-subtitle">Kelola presensi harian siswa dan pantau rekapitulasi kehadiran bulanan secara instan</span>
+              <span className="presensi-subtitle">MTsN 1 Mojokerto</span>
             </div>
           </div>
 

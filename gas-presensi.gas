@@ -1,0 +1,432 @@
+const SPREADSHEET_ID = '1zTyZYChQwcut2kP_vzmZETON-pxjiA7fymOqmt4CiFc';
+
+function getSpreadsheet() {
+  return SpreadsheetApp.openById(SPREADSHEET_ID);
+}
+
+function responseJSON(payload) {
+  return ContentService.createTextOutput(JSON.stringify(payload)).setMimeType(ContentService.MimeType.JSON);
+}
+
+function getOrCreateSheet(ss, sheetName) {
+  let sheet = ss.getSheetByName(sheetName);
+  if (!sheet) {
+    sheet = ss.insertSheet(sheetName);
+  }
+  return sheet;
+}
+
+function ensureHeaderRow(sheet, headers) {
+  const lastRow = sheet.getLastRow();
+  const targetRange = sheet.getRange(1, 1, 1, headers.length);
+  const firstRow = targetRange.getValues()[0];
+
+  if (lastRow === 0 || firstRow.every((cell) => String(cell || '').trim() === '')) {
+    targetRange.setValues([headers]);
+  }
+}
+
+function normalizeText(value) {
+  return String(value == null ? '' : value).trim();
+}
+
+function normalizeNis(value) {
+  return normalizeText(value).replace(/\s+/g, '');
+}
+
+function normalizeDateValue(value) {
+  if (value instanceof Date) {
+    return Utilities.formatDate(value, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+  }
+
+  const text = normalizeText(value);
+  if (!text) {
+    return '';
+  }
+
+  const parsedDate = new Date(text);
+  if (!Number.isNaN(parsedDate.getTime())) {
+    return Utilities.formatDate(parsedDate, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+  }
+
+  return text;
+}
+
+function normalizeStatus(value) {
+  const normalized = normalizeText(value).toLowerCase();
+  const statusMap = {
+    hadir: 'Hadir',
+    izin: 'Izin',
+    sakit: 'Sakit',
+    alpha: 'Alpha',
+  };
+
+  return statusMap[normalized] || normalizeText(value) || 'Hadir';
+}
+
+function buildAbsensiKey(tanggal, kelas, nis) {
+  return `${normalizeDateValue(tanggal)}|${normalizeText(kelas)}|${normalizeNis(nis)}`;
+}
+
+function findExistingAbsensiRow(rows, tanggal, kelas, nis) {
+  const targetDate = normalizeDateValue(tanggal);
+  const targetClass = normalizeText(kelas);
+  const targetNis = normalizeNis(nis);
+
+  for (let i = 1; i < rows.length; i += 1) {
+    const row = rows[i];
+    if (!row || row.length < 6) {
+      continue;
+    }
+
+    const rowDate = normalizeDateValue(row[1]);
+    const rowKelas = normalizeText(row[2]);
+    const rowNis = normalizeNis(row[3]);
+
+    if (rowDate === targetDate && rowKelas === targetClass && rowNis === targetNis) {
+      return i + 1;
+    }
+  }
+
+  return 0;
+}
+
+function getSiswaData(ss) {
+  const sheet = getOrCreateSheet(ss, 'Siswa');
+  ensureHeaderRow(sheet, ['id', 'kelas', 'nis', 'nama']);
+
+  const rows = sheet.getDataRange().getValues();
+  if (rows.length <= 1) {
+    return [];
+  }
+
+  return rows.slice(1)
+    .filter((row) => row.some((cell) => cell !== ''))
+    .map((row) => ({
+      id: row[0] ?? '',
+      kelas: row[1] ?? '',
+      nis: row[2] ?? '',
+      nama: row[3] ?? '',
+    }));
+}
+
+function simpanAbsensi(ss, payload) {
+  if (!payload || !payload.tanggal || !payload.kelas) {
+    return { success: false, message: 'Tanggal dan kelas wajib diisi.' };
+  }
+
+  const sheet = getOrCreateSheet(ss, 'Absensi');
+  ensureHeaderRow(sheet, ['timestamp', 'tanggal', 'kelas', 'nis', 'nama', 'status']);
+
+  const attendanceList = Array.isArray(payload.absensiData) ? payload.absensiData : [];
+
+  if (!attendanceList.length) {
+    return { success: false, message: 'Tidak ada data absensi yang dikirim.' };
+  }
+
+  const savedAt = new Date();
+  const formattedTimestamp = Utilities.formatDate(savedAt, Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss');
+  const normalizedTanggal = normalizeDateValue(payload.tanggal);
+  const normalizedKelas = normalizeText(payload.kelas);
+  const seen = new Set();
+  let savedCount = 0;
+
+  const rows = sheet.getDataRange().getValues();
+
+  attendanceList.forEach((item) => {
+    if (!item || !item.nis) {
+      return;
+    }
+
+    const nis = normalizeNis(item.nis);
+    const nama = normalizeText(item.nama);
+    const status = normalizeStatus(item.status || 'Hadir');
+    const key = buildAbsensiKey(normalizedTanggal, normalizedKelas, nis);
+
+    if (seen.has(key)) {
+      return;
+    }
+    seen.add(key);
+
+    const existingRowIndex = findExistingAbsensiRow(rows, normalizedTanggal, normalizedKelas, nis);
+    const rowData = [
+      formattedTimestamp,
+      normalizedTanggal,
+      normalizedKelas,
+      nis,
+      nama,
+      status,
+    ];
+
+    if (existingRowIndex > 0) {
+      sheet.getRange(existingRowIndex, 1, 1, rowData.length).setValues([rowData]);
+    } else {
+      sheet.appendRow(rowData);
+    }
+
+    savedCount += 1;
+  });
+
+  return {
+    success: true,
+    message: `Data absensi berhasil disimpan (${savedCount} siswa).`,
+    savedCount,
+  };
+}
+
+function getAbsensiByDate(ss, params) {
+  const tanggal = normalizeDateValue(params && params.tanggal ? params.tanggal : '');
+  const kelas = normalizeText(params && params.kelas ? params.kelas : '');
+
+  if (!tanggal || !kelas) {
+    return { success: false, message: 'Tanggal dan kelas wajib diisi.' };
+  }
+
+  const sheet = getOrCreateSheet(ss, 'Absensi');
+  const rows = sheet.getDataRange().getValues();
+
+  if (rows.length <= 1) {
+    return { success: true, data: {} };
+  }
+
+  const statusByNis = {};
+
+  rows.slice(1).forEach((row) => {
+    if (!row || row.length < 6) {
+      return;
+    }
+
+    const rowDate = normalizeDateValue(row[1]);
+    const rowKelas = normalizeText(row[2]);
+    const rowNis = normalizeNis(row[3]);
+    const status = normalizeStatus(row[5]);
+
+    if (!rowDate || !rowKelas || !rowNis) {
+      return;
+    }
+
+    if (rowDate === tanggal && rowKelas === kelas) {
+      statusByNis[rowNis] = status;
+    }
+  });
+
+  return { success: true, data: statusByNis };
+}
+
+function cleanupDuplicateAbsensi(ss) {
+  const sheet = getOrCreateSheet(ss, 'Absensi');
+  const values = sheet.getDataRange().getValues();
+
+  if (values.length <= 1) {
+    return { success: true, removed: 0, message: 'Tidak ada data absensi untuk dibersihkan.' };
+  }
+
+  const lastRowByKey = new Map();
+  const rowsToDelete = new Set();
+
+  values.slice(1).forEach((row, index) => {
+    if (!row || row.every((cell) => String(cell || '').trim() === '')) {
+      return;
+    }
+
+    if (row.length < 6) {
+      return;
+    }
+
+    const tanggal = normalizeDateValue(row[1]);
+    const kelas = normalizeText(row[2]);
+    const nis = normalizeNis(row[3]);
+
+    if (!tanggal || !kelas || !nis) {
+      return;
+    }
+
+    const key = buildAbsensiKey(tanggal, kelas, nis);
+    const absoluteRow = index + 2;
+
+    if (lastRowByKey.has(key)) {
+      rowsToDelete.add(lastRowByKey.get(key));
+    }
+
+    lastRowByKey.set(key, absoluteRow);
+  });
+
+  const finalRowsToDelete = [...rowsToDelete]
+    .filter((rowNumber) => rowNumber > 1)
+    .sort((a, b) => b - a);
+
+  if (!finalRowsToDelete.length) {
+    return { success: true, removed: 0, message: 'Tidak ditemukan duplikasi pada tanggal + kelas + NIS.' };
+  }
+
+  finalRowsToDelete.forEach((rowNumber) => {
+    sheet.deleteRow(rowNumber);
+  });
+
+  return {
+    success: true,
+    removed: finalRowsToDelete.length,
+    message: `Berhasil membersihkan ${finalRowsToDelete.length} data duplikat pada sheet Absensi.`,
+  };
+}
+
+function getRekapData(ss, params) {
+  const kelas = params && params.kelas ? String(params.kelas) : '';
+  const bulan = Number(params && params.bulan ? params.bulan : 0);
+  const tahun = Number(params && params.tahun ? params.tahun : 0);
+
+  if (!kelas || !bulan || !tahun) {
+    return { success: false, message: 'Parameter kelas, bulan, dan tahun wajib diisi.' };
+  }
+
+  cleanupDuplicateAbsensi(ss);
+
+  const sheetSiswa = getOrCreateSheet(ss, 'Siswa');
+  const dataSiswa = sheetSiswa.getDataRange().getValues();
+  if (dataSiswa.length <= 1) {
+    return { success: true, data: [] };
+  }
+
+  const siswaKelas = dataSiswa.slice(1)
+    .filter((row) => normalizeText(row[1]) === normalizeText(kelas))
+    .map((row) => ({
+      nis: normalizeNis(row[2]),
+      nama: normalizeText(row[3]),
+    }))
+    .filter((row) => row.nis);
+
+  const sheetAbsensi = getOrCreateSheet(ss, 'Absensi');
+  const dataAbsensi = sheetAbsensi.getDataRange().getValues();
+
+  if (dataAbsensi.length <= 1) {
+    return { success: true, data: siswaKelas.map((siswa) => ({
+      nis: siswa.nis,
+      nama: siswa.nama,
+      Hadir: 0,
+      Izin: 0,
+      Sakit: 0,
+      Alpha: 0,
+      Total: 0,
+    })) };
+  }
+
+  const rekapMap = {};
+  siswaKelas.forEach((siswa) => {
+    rekapMap[siswa.nis] = {
+      nis: siswa.nis,
+      nama: siswa.nama,
+      Hadir: 0,
+      Izin: 0,
+      Sakit: 0,
+      Alpha: 0,
+      Total: 0,
+    };
+  });
+
+  const uniqueKeys = new Set();
+
+  dataAbsensi.slice(1).forEach((row) => {
+    if (!row || row.length < 6) {
+      return;
+    }
+
+    const tanggal = normalizeDateValue(row[1]);
+    const kelasAbsensi = normalizeText(row[2]);
+    const nis = normalizeNis(row[3]);
+    const status = normalizeStatus(row[5]);
+
+    if (!tanggal || !kelasAbsensi || !nis || !status) {
+      return;
+    }
+
+    const dateValue = new Date(tanggal + 'T00:00:00');
+    if (Number.isNaN(dateValue.getTime())) {
+      return;
+    }
+
+    if (kelasAbsensi !== normalizeText(kelas)) {
+      return;
+    }
+
+    if (dateValue.getMonth() + 1 !== bulan || dateValue.getFullYear() !== tahun) {
+      return;
+    }
+
+    if (!rekapMap[nis]) {
+      return;
+    }
+
+    const key = buildAbsensiKey(tanggal, kelasAbsensi, nis);
+    if (uniqueKeys.has(key)) {
+      return;
+    }
+    uniqueKeys.add(key);
+
+    if (rekapMap[nis][status] !== undefined) {
+      rekapMap[nis][status] += 1;
+      rekapMap[nis].Total += 1;
+    }
+  });
+
+  return { success: true, data: Object.values(rekapMap) };
+}
+
+function doGet(e) {
+  const ss = getSpreadsheet();
+  const action = (e && e.parameter && e.parameter.action) || '';
+
+  if (action === 'getSiswa') {
+    return responseJSON({ success: true, data: getSiswaData(ss) });
+  }
+
+  if (action === 'getRekap') {
+    return responseJSON(getRekapData(ss, e.parameter));
+  }
+
+  if (action === 'getAbsensiByDate') {
+    return responseJSON(getAbsensiByDate(ss, e.parameter));
+  }
+
+  if (action === 'cleanupDuplicateAbsensi') {
+    return responseJSON(cleanupDuplicateAbsensi(ss));
+  }
+
+  return responseJSON({ success: false, message: 'Aksi GET tidak valid.' });
+}
+
+function doPost(e) {
+  const ss = getSpreadsheet();
+
+  try {
+    const raw = (e && e.postData && e.postData.contents) ? e.postData.contents : '';
+    const payload = raw ? JSON.parse(raw) : {};
+    const action = payload.action;
+
+    if (action === 'getSiswa') {
+      return responseJSON({ success: true, data: getSiswaData(ss) });
+    }
+
+    if (action === 'simpanAbsensi') {
+      return responseJSON(simpanAbsensi(ss, payload));
+    }
+
+    if (action === 'getRekap') {
+      return responseJSON(getRekapData(ss, payload));
+    }
+
+    if (action === 'getAbsensiByDate') {
+      return responseJSON(getAbsensiByDate(ss, payload));
+    }
+
+    if (action === 'cleanupDuplicateAbsensi') {
+      return responseJSON(cleanupDuplicateAbsensi(ss));
+    }
+
+    return responseJSON({ success: false, message: 'Aksi POST tidak valid.' });
+  } catch (error) {
+    return responseJSON({
+      success: false,
+      message: error && error.message ? error.message : String(error),
+    });
+  }
+}

@@ -1,33 +1,15 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import './PresensiDashboard.css';
+import {
+  fetchMonthlySummary,
+  fetchPresensiStudents,
+  fetchPresensiStatusByDate,
+  savePresensi,
+} from '../../../services/presensiService';
 
-const CLASS_OPTIONS = ['7A', '7B', '7C'];
-const TOTAL_ACTIVE_STUDENTS = 10;
-const TOTAL_CLASSES = 3;
 const ATTENDANCE_RATE = 72.7;
 const TOTAL_SESSIONS = 6;
-
-const STUDENTS_BY_CLASS = {
-  '7A': [
-    { id: 1, nis: '1001', name: 'Budi Santoso', status: 'Hadir' },
-    { id: 2, nis: '1002', name: 'Siti Aminah', status: 'Izin' },
-    { id: 3, nis: '1003', name: 'Ahmad Rizki', status: 'Sakit' },
-    { id: 4, nis: '1004', name: 'Dewi Lestari', status: 'Alpha' },
-  ],
-  '7B': [
-    { id: 5, nis: '1011', name: 'Rosa Amelia', status: 'Hadir' },
-    { id: 6, nis: '1012', name: 'Fajar Nugroho', status: 'Hadir' },
-    { id: 7, nis: '1013', name: 'Nadia Putri', status: 'Izin' },
-    { id: 8, nis: '1014', name: 'Arif Hidayat', status: 'Sakit' },
-  ],
-  '7C': [
-    { id: 9, nis: '1021', name: 'Rizky Maulana', status: 'Hadir' },
-    { id: 10, nis: '1022', name: 'Diana Pratiwi', status: 'Hadir' },
-    { id: 11, nis: '1023', name: 'Vino Setiawan', status: 'Izin' },
-    { id: 12, nis: '1024', name: 'Lia Sari', status: 'Alpha' },
-  ],
-};
 
 const ATTENDANCE_OPTIONS = ['Hadir', 'Izin', 'Sakit', 'Alpha'];
 
@@ -41,18 +23,158 @@ const STATUS_CLASS_MAP = {
 export default function PresensiDashboard({ user, onLogout }) {
   const today = new Date().toISOString().slice(0, 10);
   const [selectedDate, setSelectedDate] = useState(today);
-  const [selectedClass, setSelectedClass] = useState(CLASS_OPTIONS[0]);
+  const [selectedClass, setSelectedClass] = useState('');
   const [activeTab, setActiveTab] = useState('harian');
-  const [students, setStudents] = useState(STUDENTS_BY_CLASS[CLASS_OPTIONS[0]]);
+  const [students, setStudents] = useState([]);
+  const [studentsByClass, setStudentsByClass] = useState({});
+  const [monthlySummaryRows, setMonthlySummaryRows] = useState([]);
+  const [saving, setSaving] = useState(false);
+  const [loadError, setLoadError] = useState('');
+
+  const classOptions = useMemo(() => Object.keys(studentsByClass), [studentsByClass]);
+  const totalClasses = classOptions.length;
+  const totalActiveStudents = Object.values(studentsByClass).reduce((sum, group) => sum + group.length, 0);
+
+  const loadStudents = async () => {
+    try {
+      setLoadError('');
+      const studentRows = await fetchPresensiStudents();
+
+      const mapped = studentRows.reduce((acc, student) => {
+        const kelas = student.kelas || 'Umum';
+        if (!acc[kelas]) acc[kelas] = [];
+        acc[kelas].push({
+          id: student.id,
+          nis: student.nis,
+          name: student.name,
+          status: 'Hadir',
+        });
+        return acc;
+      }, {});
+
+      const classKeys = Object.keys(mapped);
+      setStudentsByClass(mapped);
+
+      if (classKeys.length) {
+        setSelectedClass((current) => (classKeys.includes(current) ? current : classKeys[0]));
+      } else {
+        setSelectedClass('');
+      }
+    } catch (error) {
+      console.error('Gagal memuat data siswa:', error);
+      setLoadError('Gagal memuat daftar siswa dari server.');
+      setStudentsByClass({});
+      setSelectedClass('');
+    }
+  };
+
+  const refreshAttendanceStatus = async (currentClass = selectedClass, currentDate = selectedDate) => {
+    if (!currentClass || !currentDate) {
+      setStudents([]);
+      return;
+    }
+
+    try {
+      setLoadError('');
+      const statusByNis = await fetchPresensiStatusByDate({
+        tanggal: currentDate,
+        kelas: currentClass,
+      });
+
+      const baseStudents = studentsByClass[currentClass] || [];
+      const updatedStudents = baseStudents.map((student) => ({
+        ...student,
+        status: statusByNis[student.nis] || 'Hadir',
+      }));
+
+      setStudents(updatedStudents);
+      setStudentsByClass((currentMap) => ({
+        ...currentMap,
+        [currentClass]: updatedStudents,
+      }));
+    } catch (error) {
+      console.error('Gagal memuat status presensi terdaftar:', {
+        currentClass,
+        currentDate,
+        error: error?.message || error,
+      });
+      setLoadError('Gagal memuat status presensi dari spreadsheet.');
+      setStudents(studentsByClass[currentClass] || []);
+    }
+  };
 
   useEffect(() => {
-    setStudents(STUDENTS_BY_CLASS[selectedClass]);
-  }, [selectedClass]);
+    loadStudents();
+    const onFocus = () => loadStudents();
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
+  }, []);
+
+  useEffect(() => {
+    if (!selectedClass) {
+      setStudents([]);
+      return;
+    }
+
+    refreshAttendanceStatus(selectedClass, selectedDate);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedClass, selectedDate]);
+
+  useEffect(() => {
+    if (activeTab !== 'rekap') {
+      return;
+    }
+
+    loadMonthlySummary(selectedClass, selectedDate);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, selectedClass, selectedDate]);
 
   const monthLabel = new Date(selectedDate).toLocaleDateString('id-ID', {
     month: 'long',
     year: 'numeric',
   });
+
+  const loadMonthlySummary = async (currentClass = selectedClass, currentDate = selectedDate) => {
+    if (!currentClass || !currentDate) {
+      setMonthlySummaryRows([]);
+      return;
+    }
+
+    try {
+      const dateObj = new Date(`${currentDate}T00:00:00`);
+      const bulan = dateObj.getMonth() + 1;
+      const tahun = dateObj.getFullYear();
+
+      const summaryRows = await fetchMonthlySummary({
+        kelas: currentClass,
+        bulan,
+        tahun,
+      });
+
+      setMonthlySummaryRows(summaryRows);
+    } catch (error) {
+      console.error('Gagal memuat rekap bulan dari spreadsheet:', error);
+      setMonthlySummaryRows([]);
+    }
+  };
+
+  const monthlyStatusCounts = useMemo(() => {
+    const base = { Hadir: 0, Izin: 0, Sakit: 0, Alpha: 0 };
+    const sourceRows = activeTab === 'rekap' ? monthlySummaryRows : students;
+
+    sourceRows.forEach((row) => {
+      Object.entries(base).forEach(([status, total]) => {
+        const value = Number(row?.[status] ?? 0);
+        if (!Number.isNaN(value)) {
+          base[status] = total + value;
+        }
+      });
+    });
+
+    return base;
+  }, [activeTab, monthlySummaryRows, students]);
+
+  const monthlyTableRows = activeTab === 'rekap' ? monthlySummaryRows : students;
 
   const handleUpdateStatus = (id, status) => {
     setStudents((currentStudents) =>
@@ -68,8 +190,28 @@ export default function PresensiDashboard({ user, onLogout }) {
     );
   };
 
-  const handleSave = () => {
-    alert('Data presensi berhasil disimpan.');
+  const handleSave = async () => {
+    setSaving(true);
+
+    try {
+      const payload = {
+        tanggal: selectedDate,
+        kelas: selectedClass,
+        absensiData: students.map((student) => ({
+          nis: student.nis,
+          nama: student.name,
+          status: student.status,
+        })),
+      };
+
+      await savePresensi(payload);
+      alert('Data presensi berhasil disimpan.');
+    } catch (error) {
+      console.error('Gagal menyimpan presensi:', error);
+      alert(error.message || 'Gagal menyimpan data presensi.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const isMonthlySummary = activeTab === 'rekap';
@@ -96,8 +238,8 @@ export default function PresensiDashboard({ user, onLogout }) {
         <section className="presensi-stats" aria-label="Ringkasan presensi">
           <article className="presensi-stat-card">
             <span className="presensi-stat-label">Total Siswa Aktif</span>
-            <strong className="presensi-stat-value">{TOTAL_ACTIVE_STUDENTS}</strong>
-            <small className="presensi-stat-meta">{TOTAL_CLASSES} Kelas Terdaftar</small>
+            <strong className="presensi-stat-value">{totalActiveStudents}</strong>
+            <small className="presensi-stat-meta">{totalClasses} Kelas Terdaftar</small>
           </article>
 
           <article className="presensi-stat-card">
@@ -144,15 +286,15 @@ export default function PresensiDashboard({ user, onLogout }) {
               <div className="presensi-rekap-stats">
                 <article className="presensi-rekap-card presensi-rekap-card--hadir">
                   <span>Hadir</span>
-                  <strong>72%</strong>
+                  <strong>{monthlyStatusCounts.Hadir}</strong>
                 </article>
                 <article className="presensi-rekap-card presensi-rekap-card--izin">
                   <span>Izin</span>
-                  <strong>14%</strong>
+                  <strong>{monthlyStatusCounts.Izin}</strong>
                 </article>
                 <article className="presensi-rekap-card presensi-rekap-card--alpha">
                   <span>Alpha</span>
-                  <strong>8%</strong>
+                  <strong>{monthlyStatusCounts.Alpha}</strong>
                 </article>
               </div>
 
@@ -168,13 +310,13 @@ export default function PresensiDashboard({ user, onLogout }) {
                     </tr>
                   </thead>
                   <tbody>
-                    {students.map((student) => (
-                      <tr key={student.id}>
-                        <td>{student.name}</td>
-                        <td>{student.status === 'Hadir' ? '✓' : '-'}</td>
-                        <td>{student.status === 'Izin' ? '✓' : '-'}</td>
-                        <td>{student.status === 'Sakit' ? '✓' : '-'}</td>
-                        <td>{student.status === 'Alpha' ? '✓' : '-'}</td>
+                    {monthlyTableRows.map((student) => (
+                      <tr key={student.id ?? student.nis ?? student.nama ?? student.name}>
+                        <td>{student.nama ?? student.name}</td>
+                        <td>{Number(student.Hadir ?? 0)}</td>
+                        <td>{Number(student.Izin ?? 0)}</td>
+                        <td>{Number(student.Sakit ?? 0)}</td>
+                        <td>{Number(student.Alpha ?? 0)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -201,11 +343,15 @@ export default function PresensiDashboard({ user, onLogout }) {
                     value={selectedClass}
                     onChange={(event) => setSelectedClass(event.target.value)}
                   >
-                    {CLASS_OPTIONS.map((kelas) => (
-                      <option key={kelas} value={kelas}>
-                        {kelas}
-                      </option>
-                    ))}
+                    {classOptions.length ? (
+                      classOptions.map((kelas) => (
+                        <option key={kelas} value={kelas}>
+                          {kelas}
+                        </option>
+                      ))
+                    ) : (
+                      <option value="">Tidak ada kelas</option>
+                    )}
                   </select>
                 </div>
               </div>
@@ -224,6 +370,8 @@ export default function PresensiDashboard({ user, onLogout }) {
                 <div className="presensi-table-header">
                   <span>{students.length} Siswa Terdaftar</span>
                 </div>
+
+                {!selectedClass && !loadError && <p className="presensi-error-text">Memuat data kelas...</p>}
 
                 <table className="presensi-table">
                   <thead>
@@ -273,9 +421,11 @@ export default function PresensiDashboard({ user, onLogout }) {
                 </table>
               </div>
 
+              {loadError && <p className="presensi-error-text">{loadError}</p>}
+
               <div className="presensi-save-row">
-                <button type="button" className="presensi-save-button" onClick={handleSave}>
-                  Simpan Ke Database
+                <button type="button" className="presensi-save-button" onClick={handleSave} disabled={saving}>
+                  {saving ? 'Menyimpan...' : 'Simpan Ke Database'}
                 </button>
               </div>
             </>

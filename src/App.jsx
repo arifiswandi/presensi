@@ -4,7 +4,7 @@ import LoginPage from './pages/LoginPage';
 import DashboardPage from './pages/DashboardPage';
 import AnekdotPage from './pages/AnekdotPage';
 import { PresensiDashboard } from './features/presensi';
-import { postToGas } from './services/gasService';
+import { postToGas } from './services/gasAnekdotService';
 import { useStoredUser } from './hooks/useStoredUser';
 
 export default function App() {

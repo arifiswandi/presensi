@@ -1,6 +1,7 @@
 import React from 'react';
 import { HashRouter, Navigate, Route, Routes } from 'react-router-dom';
 import LoginPage from './pages/LoginPage';
+import DashboardPage from './pages/DashboardPage';
 import AnekdotPage from './pages/AnekdotPage';
 import { PresensiDashboard } from './features/presensi';
 import { postToGas } from './services/gasService';
@@ -12,10 +13,14 @@ export default function App() {
   return (
     <HashRouter>
       <Routes>
-        <Route path="/" element={<Navigate to={user ? '/presensi' : '/login'} replace />} />
+        <Route path="/" element={<Navigate to={user ? '/dashboard' : '/login'} replace />} />
         <Route
           path="/login"
-          element={user ? <Navigate to="/presensi" replace /> : <LoginPage onLogin={setUser} postToGas={postToGas} />}
+          element={user ? <Navigate to="/dashboard" replace /> : <LoginPage onLogin={setUser} postToGas={postToGas} />}
+        />
+        <Route
+          path="/dashboard"
+          element={user ? <DashboardPage user={user} onLogout={() => setUser(null)} /> : <Navigate to="/login" replace />}
         />
         <Route
           path="/presensi"
@@ -25,7 +30,7 @@ export default function App() {
           path="/anekdot"
           element={user ? <AnekdotPage user={user} onLogout={() => setUser(null)} postToGas={postToGas} /> : <Navigate to="/login" replace />}
         />
-        <Route path="*" element={<Navigate to={user ? '/presensi' : '/login'} replace />} />
+        <Route path="*" element={<Navigate to={user ? '/dashboard' : '/login'} replace />} />
       </Routes>
     </HashRouter>
   );

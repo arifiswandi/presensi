@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import './PresensiDashboard.css';
 
 const CLASS_OPTIONS = ['X-IPA-1', 'X-IPA-2', 'X-IPS-1'];
@@ -86,6 +87,7 @@ export default function PresensiDashboard({ user, onLogout }) {
           </div>
 
           <div className="presensi-actions">
+            <Link to="/dashboard" className="presensi-back-button">Kembali ke Dashboard</Link>
             <span className="presensi-user">Halo, {user?.username ?? 'Admin'} ({user?.role ?? 'User'})</span>
             <button type="button" className="presensi-logout" onClick={onLogout}>Logout</button>
           </div>

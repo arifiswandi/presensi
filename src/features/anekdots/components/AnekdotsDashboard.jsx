@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { Link } from 'react-router-dom';
 import './AnekdotsDashboard.css';
-import StatCard from '../../../components/ui/StatCard';
-import ExportButton from '../../../components/ui/ExportButton';
 import { exportWorkbookAsExcel } from '../utils/exportExcel';
 import { mapExcelRowToRecord } from '../utils/excelImport';
 import {
@@ -22,6 +21,52 @@ const INITIAL_ANEKDOT_FORM = {
   Penanganan: '',
   Keterangan: '',
 };
+
+function StatCard({ label, value, meta }) {
+  return (
+    <div className="stat-card">
+      <span className="stat-card__label">{label}</span>
+      <p className="stat-card__value">{value}</p>
+      <span className="stat-card__meta">{meta}</span>
+    </div>
+  );
+}
+
+function ExportButton({
+  label,
+  onClick,
+  variant = 'default',
+  loading = false,
+  disabled = false,
+}) {
+  const resolvedLabel = typeof label === 'string' ? { text: label } : label;
+  const className = `export-button export-button--${
+    variant === 'excel'
+      ? 'excel'
+      : variant === 'pdf'
+        ? 'pdf'
+        : variant === 'import'
+          ? 'import'
+          : 'default'
+  }`;
+
+  return (
+    <button
+      type="button"
+      className={className}
+      onClick={onClick}
+      disabled={disabled || loading}
+      aria-busy={loading ? 'true' : 'false'}
+    >
+      <span className="export-button__content">
+        <span className={`export-button__icon ${loading ? 'export-button__icon--loading' : ''}`} aria-hidden="true">
+          {loading ? '⏳' : resolvedLabel.icon || '•'}
+        </span>
+        <span>{loading ? resolvedLabel.loadingText || 'Memproses...' : resolvedLabel.text}</span>
+      </span>
+    </button>
+  );
+}
 
 export default function AnekdotsDashboard({ user, onLogout, postToGas }) {
   const [anekdots, setAnekdots] = useState([]);
@@ -503,6 +548,7 @@ export default function AnekdotsDashboard({ user, onLogout, postToGas }) {
             </div>
           </div>
           <div className="dashboard__actions">
+            <Link to="/dashboard" className="dashboard__back-button">Kembali ke Dashboard</Link>
             <span className="dashboard__user">Halo, {user.username} ({user.role})</span>
             <button className="dashboard__logout" onClick={onLogout}>Logout</button>
           </div>

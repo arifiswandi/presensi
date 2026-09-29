@@ -2,26 +2,26 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import './PresensiDashboard.css';
 
-const CLASS_OPTIONS = ['X-IPA-1', 'X-IPA-2', 'X-IPS-1'];
+const CLASS_OPTIONS = ['7A', '7B', '7C'];
 const TOTAL_ACTIVE_STUDENTS = 10;
 const TOTAL_CLASSES = 3;
 const ATTENDANCE_RATE = 72.7;
 const TOTAL_SESSIONS = 6;
 
 const STUDENTS_BY_CLASS = {
-  'X-IPA-1': [
+  '7A': [
     { id: 1, nis: '1001', name: 'Budi Santoso', status: 'Hadir' },
     { id: 2, nis: '1002', name: 'Siti Aminah', status: 'Izin' },
     { id: 3, nis: '1003', name: 'Ahmad Rizki', status: 'Sakit' },
     { id: 4, nis: '1004', name: 'Dewi Lestari', status: 'Alpha' },
   ],
-  'X-IPA-2': [
+  '7B': [
     { id: 5, nis: '1011', name: 'Rosa Amelia', status: 'Hadir' },
     { id: 6, nis: '1012', name: 'Fajar Nugroho', status: 'Hadir' },
     { id: 7, nis: '1013', name: 'Nadia Putri', status: 'Izin' },
     { id: 8, nis: '1014', name: 'Arif Hidayat', status: 'Sakit' },
   ],
-  'X-IPS-1': [
+  '7C': [
     { id: 9, nis: '1021', name: 'Rizky Maulana', status: 'Hadir' },
     { id: 10, nis: '1022', name: 'Diana Pratiwi', status: 'Hadir' },
     { id: 11, nis: '1023', name: 'Vino Setiawan', status: 'Izin' },

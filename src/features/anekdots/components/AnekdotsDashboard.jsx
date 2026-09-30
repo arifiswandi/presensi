@@ -67,7 +67,8 @@ export default function AnekdotsDashboard({ user, onLogout, postToGas }) {
   const [formData, setFormData] = useState(INITIAL_ANEKDOT_FORM);
   const [isEditing, setIsEditing] = useState(false);
   const [isFormOpen, setIsFormOpen] = useState(false);
-  const [selectedClass, setSelectedClass] = useState('Semua');
+  const [selectedClasses, setSelectedClasses] = useState(['Semua']);
+  const [isClassDropdownOpen, setIsClassDropdownOpen] = useState(false);
   const [searchStudent, setSearchStudent] = useState('');
   const [isPrintFormOpen, setIsPrintFormOpen] = useState(false);
   const [printForm, setPrintForm] = useState({
@@ -77,6 +78,7 @@ export default function AnekdotsDashboard({ user, onLogout, postToGas }) {
     guruBkNip: '',
   });
   const fileInputRef = useRef(null);
+  const classDropdownRef = useRef(null);
   const isActionBusy = loading || exporting || importing;
 
   const resetForm = () => {
@@ -101,6 +103,17 @@ export default function AnekdotsDashboard({ user, onLogout, postToGas }) {
   useEffect(() => {
     loadAnekdots();
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (classDropdownRef.current && !classDropdownRef.current.contains(event.target)) {
+        setIsClassDropdownOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
   const handleFieldChange = (event) => {
@@ -206,12 +219,30 @@ export default function AnekdotsDashboard({ user, onLogout, postToGas }) {
     return a.localeCompare(b, 'id', { sensitivity: 'base' });
   })];
 
+  const handleClassToggle = (kelas) => {
+    setSelectedClasses((current) => {
+      if (kelas === 'Semua') {
+        return ['Semua'];
+      }
+
+      const withoutAll = current.filter((item) => item !== 'Semua');
+      if (withoutAll.includes(kelas)) {
+        const next = withoutAll.filter((item) => item !== kelas);
+        return next.length ? next : ['Semua'];
+      }
+
+      return [...withoutAll, kelas];
+    });
+  };
+
   const filteredAnekdots = [...anekdots]
     .filter((item) => {
       const normalizedClass = String(item.Kelas || '').trim().toLowerCase();
       const normalizedStudent = String(item.NamaSiswa || '').trim().toLowerCase();
       const normalizedSearch = searchStudent.trim().toLowerCase();
-      const matchesClass = selectedClass === 'Semua' || normalizedClass === selectedClass.toLowerCase();
+      const matchesClass =
+        selectedClasses.includes('Semua') ||
+        selectedClasses.some((kelas) => normalizedClass === kelas.toLowerCase());
       const matchesSearch = !normalizedSearch || normalizedStudent.includes(normalizedSearch);
       return matchesClass && matchesSearch;
     })
@@ -591,18 +622,46 @@ export default function AnekdotsDashboard({ user, onLogout, postToGas }) {
             <div className="dashboard__filters">
               <div className="dashboard__filter-field">
                 <label htmlFor="kelas-filter">Kelompok Kelas</label>
-                <select
-                  id="kelas-filter"
-                  className="dashboard__filter-select"
-                  value={selectedClass}
-                  onChange={(event) => setSelectedClass(event.target.value)}
-                >
-                  {classOptions.map((kelas) => (
-                    <option key={kelas} value={kelas}>
-                      {kelas === 'Semua' ? 'Semua Kelas' : kelas}
-                    </option>
-                  ))}
-                </select>
+                <div className="dashboard__class-dropdown" ref={classDropdownRef}>
+                  <button
+                    id="kelas-filter"
+                    type="button"
+                    className="dashboard__class-trigger"
+                    onClick={() => setIsClassDropdownOpen((prev) => !prev)}
+                  >
+                    <span>
+                      {selectedClasses.includes('Semua')
+                        ? 'Semua Kelas'
+                        : selectedClasses.length
+                          ? selectedClasses.join(', ')
+                          : 'Pilih kelas'}
+                    </span>
+                    <span className="dashboard__class-trigger-icon">▾</span>
+                  </button>
+
+                  {isClassDropdownOpen && (
+                    <div className="dashboard__class-menu" role="listbox" aria-multiselectable="true">
+                      {classOptions.map((kelas) => {
+                        const isSelected = selectedClasses.includes(kelas);
+
+                        return (
+                          <button
+                            key={kelas}
+                            type="button"
+                            className={`dashboard__class-option ${isSelected ? 'dashboard__class-option--selected' : ''}`}
+                            onClick={() => {
+                              handleClassToggle(kelas);
+                              setIsClassDropdownOpen(false);
+                            }}
+                          >
+                            <span className="dashboard__class-option-check">{isSelected ? '✓' : ''}</span>
+                            <span>{kelas === 'Semua' ? 'Semua Kelas' : kelas}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -623,8 +682,17 @@ export default function AnekdotsDashboard({ user, onLogout, postToGas }) {
                 <button
                   key={kelas}
                   type="button"
-                  className={`dashboard__group-chip ${selectedClass === kelas ? 'dashboard__group-chip--active' : ''}`}
-                  onClick={() => setSelectedClass(kelas)}
+                  className={`dashboard__group-chip ${selectedClasses.includes(kelas) ? 'dashboard__group-chip--active' : ''}`}
+                  onClick={() => {
+                    if (selectedClasses.includes(kelas)) {
+                      setSelectedClasses((current) => current.filter((item) => item !== kelas));
+                    } else {
+                      setSelectedClasses((current) => {
+                        if (kelas === 'Semua') return ['Semua'];
+                        return [...current.filter((item) => item !== 'Semua'), kelas];
+                      });
+                    }
+                  }}
                 >
                   {kelas}
                 </button>

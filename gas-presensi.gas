@@ -1,7 +1,11 @@
 const PRESENSI_ROOT_FOLDER_NAME = 'Presensi';
-const PRESENSI_FOLDER_ID = ''; // optional: jika diisi, folder ini dipakai sebagai root; kalau kosong otomatis dibuat
+const PRESENSI_FOLDER_ID = '1kS9hXo_Eoeb4HgAoH8wtOSGSsKCl9udS'; // optional: jika diisi, folder ini dipakai sebagai root; kalau kosong otomatis dibuat
 const PRESENSI_FILE_PREFIX = 'Presensi_';
 const SISWA_FILE_PREFIX = 'Siswa_';
+
+// Isi ID spreadsheet utama jika Anda ingin tetap memakai spreadsheet yang spesifik.
+// Jika kosong, script akan otomatis membuat spreadsheet baru per bulan/tahun sesuai kebutuhan.
+const SPREADSHEET_ID = PropertiesService.getScriptProperties().getProperty('PRESENSI_SPREADSHEET_ID') || '';
 
 const MULTI_SPREADSHEET_IDS = {
   default: SPREADSHEET_ID,
@@ -9,6 +13,14 @@ const MULTI_SPREADSHEET_IDS = {
   siswa: SPREADSHEET_ID,
   rekap: SPREADSHEET_ID,
 };
+
+function getDefaultSpreadsheetId() {
+  return (
+    PropertiesService.getScriptProperties().getProperty('PRESENSI_SPREADSHEET_ID') ||
+    SPREADSHEET_ID ||
+    ''
+  );
+}
 
 function getMonthlySpreadsheetKey(dateValue) {
   const sourceDate = dateValue ? new Date(dateValue) : new Date();
@@ -109,9 +121,13 @@ function getOrCreateSiswaSpreadsheet(dateValue) {
 
 function getSpreadsheet(spreadsheetTarget, dateValue) {
   const normalizedTarget = (spreadsheetTarget == null ? '' : String(spreadsheetTarget).trim());
+  const defaultId = getDefaultSpreadsheetId();
 
   if (!normalizedTarget || normalizedTarget === 'default') {
-    return SpreadsheetApp.openById(MULTI_SPREADSHEET_IDS.default);
+    if (defaultId) {
+      return SpreadsheetApp.openById(defaultId);
+    }
+    return getOrCreateMonthlySpreadsheet(dateValue || new Date());
   }
 
   if (
@@ -138,7 +154,11 @@ function getSpreadsheet(spreadsheetTarget, dateValue) {
     return SpreadsheetApp.openById(normalizedTarget);
   }
 
-  return SpreadsheetApp.openById(MULTI_SPREADSHEET_IDS.default);
+  if (defaultId) {
+    return SpreadsheetApp.openById(defaultId);
+  }
+
+  return getOrCreateMonthlySpreadsheet(dateValue || new Date());
 }
 
 function getRequestSpreadsheetTarget(data, fallback) {
@@ -173,15 +193,53 @@ function getOrCreateSheet(ss, sheetName) {
 function ensureHeaderRow(sheet, headers) {
   const lastRow = sheet.getLastRow();
   const targetRange = sheet.getRange(1, 1, 1, headers.length);
-  const firstRow = targetRange.getValues()[0];
+  const firstRow = targetRange.getValues()[0] || [];
 
-  if (lastRow === 0 || firstRow.every((cell) => String(cell || '').trim() === '')) {
+  const hasExpectedHeader = headers.some((header, index) => {
+    const value = String(firstRow[index] || '').trim().toLowerCase();
+    return value === String(header).trim().toLowerCase();
+  });
+
+  if (lastRow === 0) {
     targetRange.setValues([headers]);
+    return;
+  }
+
+  if (!hasExpectedHeader) {
+    const rowIndex = 1;
+    sheet.insertRowBefore(rowIndex);
+    sheet.getRange(rowIndex, 1, 1, headers.length).setValues([headers]);
   }
 }
 
 function normalizeText(value) {
   return String(value == null ? '' : value).trim();
+}
+
+function normalizeJenisKelamin(value) {
+  const text = normalizeText(value).toLowerCase();
+
+  if (!text) {
+    return '';
+  }
+
+  if (['l', 'lk', 'laki', 'laki-laki', 'male', 'm'].includes(text)) {
+    return 'L';
+  }
+
+  if (['p', 'pr', 'perempuan', 'female', 'f', 'wanita'].includes(text)) {
+    return 'P';
+  }
+
+  const firstLetter = text.charAt(0);
+  if (firstLetter === 'l') {
+    return 'L';
+  }
+  if (firstLetter === 'p') {
+    return 'P';
+  }
+
+  return normalizeText(value).toUpperCase();
 }
 
 function normalizeNis(value) {
@@ -247,7 +305,7 @@ function findExistingPresensiRow(rows, tanggal, kelas, nis) {
 
 function getSiswaData(ss) {
   const sheet = getOrCreateSheet(ss, 'Siswa');
-  ensureHeaderRow(sheet, ['id', 'kelas', 'nis', 'nama']);
+  ensureHeaderRow(sheet, ['ID', 'KELAS', 'NIS', 'NAMA', 'L/P']);
 
   const rows = sheet.getDataRange().getValues();
   if (rows.length <= 1) {
@@ -256,12 +314,18 @@ function getSiswaData(ss) {
 
   return rows.slice(1)
     .filter((row) => row.some((cell) => cell !== ''))
-    .map((row) => ({
-      id: row[0] ?? '',
-      kelas: row[1] ?? '',
-      nis: row[2] ?? '',
-      nama: row[3] ?? '',
-    }));
+    .map((row) => {
+      const jenisKelamin = normalizeJenisKelamin(row[4]);
+
+      return {
+        id: row[0] ?? '',
+        kelas: row[1] ?? '',
+        nis: row[2] ?? '',
+        nama: row[3] ?? '',
+        jenisKelamin,
+        gender: jenisKelamin,
+      };
+    });
 }
 
 function simpanPresensi(ss, payload) {

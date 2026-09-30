@@ -1,7 +1,7 @@
 import { postToGas } from './gasPresensiService';
 
 // Struktur response GAS dari `getSiswa`:
-// [id, kelas, nis, nama]
+// [id, kelas, nis, nama, jenisKelamin]
 const normalizeRows = (value) => {
   if (Array.isArray(value)) return value;
   if (!value || typeof value !== 'object') return [];
@@ -19,13 +19,47 @@ const normalizeRows = (value) => {
   return [];
 };
 
-const normalizeStudent = (item, index) => ({
-  id: item?.id ?? item?.nis ?? item?.NIS ?? `${item?.kelas ?? 'siswa'}-${index}`,
-  nis: item?.nis ?? item?.NIS ?? String(index + 1),
-  name: item?.nama ?? item?.name ?? item?.NamaSiswa ?? item?.Nama ?? 'Siswa',
-  kelas: item?.kelas ?? item?.Kelas ?? item?.kelasSiswa ?? item?.KelasSiswa ?? '',
-  status: item?.status ?? '',
-});
+const normalizeJenisKelamin = (value) => {
+  const text = String(value ?? '').trim().toLowerCase();
+
+  if (!text) {
+    return '';
+  }
+
+  if (['l', 'lk', 'laki', 'laki-laki', 'male', 'm'].includes(text)) {
+    return 'L';
+  }
+
+  if (['p', 'pr', 'perempuan', 'female', 'f', 'wanita'].includes(text)) {
+    return 'P';
+  }
+
+  const firstLetter = text.charAt(0);
+  if (firstLetter === 'l') {
+    return 'L';
+  }
+  if (firstLetter === 'p') {
+    return 'P';
+  }
+
+  return String(value ?? '').trim().toUpperCase();
+};
+
+const normalizeStudent = (item, index) => {
+  const jenisKelamin = normalizeJenisKelamin(
+    item?.jenisKelamin ?? item?.gender ?? item?.JenisKelamin ?? item?.jk ?? ''
+  );
+
+  return {
+    id: item?.id ?? item?.nis ?? item?.NIS ?? `${item?.kelas ?? 'siswa'}-${index}`,
+    nis: item?.nis ?? item?.NIS ?? String(index + 1),
+    name: item?.nama ?? item?.name ?? item?.NamaSiswa ?? item?.Nama ?? 'Siswa',
+    kelas: item?.kelas ?? item?.Kelas ?? item?.kelasSiswa ?? item?.KelasSiswa ?? '',
+    jenisKelamin,
+    gender: jenisKelamin,
+    status: item?.status ?? '',
+  };
+};
 
 export const fetchPresensiStudents = async () => {
   const data = await postToGas({ action: 'getSiswa' }, 'Memuat daftar siswa');

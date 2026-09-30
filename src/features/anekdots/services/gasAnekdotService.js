@@ -1,8 +1,13 @@
-export const GAS_URL = 'https://script.google.com/macros/s/AKfycby4No_Yd3lOZ90h4SnwFEohUD_99_q3khqsb8raPeUCQl7bX63R81FCjueejU--GP1O/exec';
+const GAS_DEPLOYMENT_URL = 'https://script.google.com/macros/s/AKfycby4No_Yd3lOZ90h4SnwFEohUD_99_q3khqsb8raPeUCQl7bX63R81FCjueejU--GP1O/exec';
+
+export const GAS_URL = import.meta.env.DEV ? '/api/backend' : GAS_DEPLOYMENT_URL;
 
 export const postToGas = async (payload, actionLabel = 'permintaan') => {
   const response = await fetch(GAS_URL, {
     method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
     body: JSON.stringify(payload),
   });
 

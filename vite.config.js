@@ -31,9 +31,16 @@ export default defineConfig({
     },
     proxy: {
       '/api/gas': {
+        target: 'https://script.google.com/macros/s/AKfycbx8uUhZCShJqr3uiOXeRcZTzZ59wQtzmC5O-4Npn13aKcyEwn2fwfLDxQWmyf6qZg/exec',
+        changeOrigin: true,
+        secure: false,
+        rewrite: (path) => path.replace(/^\/api\/gas/, '')
+      },
+      '/api/backend': {
         target: 'https://script.google.com/macros/s/AKfycby4No_Yd3lOZ90h4SnwFEohUD_99_q3khqsb8raPeUCQl7bX63R81FCjueejU--GP1O/exec',
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api\/gas/, '')
+        secure: false,
+        rewrite: (path) => path.replace(/^\/api\/backend/, '')
       }
     }
   }

@@ -275,8 +275,11 @@ export default function PresensiDashboard({ user, onLogout }) {
             <span className="presensi-stat-label">Rata-Rata Kehadiran</span>
             <strong className="presensi-stat-value">{Number(attendanceRate.toFixed(1))}%</strong>
             <div className="presensi-stat-effective-box">
-              <span>Hari efektif</span>
-              <strong>{effectiveDaysInMonth} hari</strong>
+              <span className="presensi-stat-effective-label">Hari efektif (berdasarkan data absensi)</span>
+              <div className="presensi-stat-effective-value-row">
+                <strong className="presensi-stat-effective-value">{effectiveDaysInMonth}</strong>
+                <span className="presensi-stat-effective-unit">hari</span>
+              </div>
             </div>
             <small className="presensi-stat-meta">Bulan {monthLabel}</small>
             <small className="presensi-stat-meta presensi-stat-meta--sub">Berdasarkan data presensi</small>

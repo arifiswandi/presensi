@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import './PresensiDashboard.css';
 import {
@@ -6,9 +6,11 @@ import {
   STATUS_CLASS_MAP,
 } from '../constants';
 import {
+  downloadSiswaImportTemplate,
   fetchMonthlySummary,
   fetchPresensiStudents,
   fetchPresensiStatusByDate,
+  importSiswaFromExcelFile,
   savePresensi,
 } from '../services';
 
@@ -21,16 +23,83 @@ export default function PresensiDashboard({ user, onLogout }) {
   const [studentsByClass, setStudentsByClass] = useState({});
   const [monthlySummaryRows, setMonthlySummaryRows] = useState([]);
   const [saving, setSaving] = useState(false);
+  const [importingStudents, setImportingStudents] = useState(false);
+  const [isRefreshingClassData, setIsRefreshingClassData] = useState(false);
+  const studentFileInputRef = useRef(null);
   const [loadError, setLoadError] = useState('');
 
   const classOptions = useMemo(() => Object.keys(studentsByClass), [studentsByClass]);
   const totalClasses = classOptions.length;
   const totalActiveStudents = Object.values(studentsByClass).reduce((sum, group) => sum + group.length, 0);
 
+  const refreshSelectedClassData = async ({ className = selectedClass, targetDate = selectedDate } = {}) => {
+    if (!className || !targetDate) {
+      setStudents([]);
+      setMonthlySummaryRows([]);
+      return [];
+    }
+
+    const dateObj = new Date(`${targetDate}T00:00:00`);
+    const bulan = dateObj.getMonth() + 1;
+    const tahun = dateObj.getFullYear();
+
+    try {
+      setLoadError('');
+      setIsRefreshingClassData(true);
+
+      const [statusByNis, summaryRows] = await Promise.all([
+        fetchPresensiStatusByDate({
+          tanggal: targetDate,
+          kelas: className,
+        }),
+        fetchMonthlySummary({
+          kelas: className,
+          bulan,
+          tahun,
+        }),
+      ]);
+
+      const baseStudents = (studentsByClass[className] || []).map((student) => ({
+        ...student,
+        status: statusByNis[student.nis] || student.status || 'Hadir',
+      }));
+
+      setStudents(baseStudents);
+      setStudentsByClass((currentMap) => ({
+        ...currentMap,
+        [className]: baseStudents,
+      }));
+      setMonthlySummaryRows(summaryRows);
+      return baseStudents;
+    } catch (error) {
+      console.error('Gagal memuat data presensi kelas:', {
+        className,
+        targetDate,
+        error: error?.message || error,
+      });
+
+      setLoadError('Gagal memuat data presensi dari spreadsheet.');
+      setStudents(studentsByClass[className] || []);
+      setMonthlySummaryRows([]);
+      return studentsByClass[className] || [];
+    } finally {
+      setIsRefreshingClassData(false);
+    }
+  };
+
   const loadStudents = async () => {
     try {
       setLoadError('');
+      setIsRefreshingClassData(true);
       const studentRows = await fetchPresensiStudents();
+
+      if (!studentRows.length) {
+        setStudentsByClass({});
+        setStudents([]);
+        setSelectedClass('');
+        setIsRefreshingClassData(false);
+        return;
+      }
 
       const mapped = studentRows.reduce((acc, student) => {
         const kelas = student.kelas || 'Umum';
@@ -48,7 +117,9 @@ export default function PresensiDashboard({ user, onLogout }) {
       setStudentsByClass(mapped);
 
       if (classKeys.length) {
-        setSelectedClass((current) => (classKeys.includes(current) ? current : classKeys[0]));
+        const nextClass = classKeys.includes(selectedClass) ? selectedClass : classKeys[0];
+        setSelectedClass(nextClass);
+        await refreshSelectedClassData({ className: nextClass, targetDate: selectedDate });
       } else {
         setSelectedClass('');
       }
@@ -56,42 +127,10 @@ export default function PresensiDashboard({ user, onLogout }) {
       console.error('Gagal memuat data siswa:', error);
       setLoadError('Gagal memuat daftar siswa dari server.');
       setStudentsByClass({});
-      setSelectedClass('');
-    }
-  };
-
-  const refreshAttendanceStatus = async (currentClass = selectedClass, currentDate = selectedDate) => {
-    if (!currentClass || !currentDate) {
       setStudents([]);
-      return;
-    }
-
-    try {
-      setLoadError('');
-      const statusByNis = await fetchPresensiStatusByDate({
-        tanggal: currentDate,
-        kelas: currentClass,
-      });
-
-      const baseStudents = studentsByClass[currentClass] || [];
-      const updatedStudents = baseStudents.map((student) => ({
-        ...student,
-        status: statusByNis[student.nis] || 'Hadir',
-      }));
-
-      setStudents(updatedStudents);
-      setStudentsByClass((currentMap) => ({
-        ...currentMap,
-        [currentClass]: updatedStudents,
-      }));
-    } catch (error) {
-      console.error('Gagal memuat status presensi terdaftar:', {
-        currentClass,
-        currentDate,
-        error: error?.message || error,
-      });
-      setLoadError('Gagal memuat status presensi dari spreadsheet.');
-      setStudents(studentsByClass[currentClass] || []);
+      setSelectedClass('');
+    } finally {
+      setIsRefreshingClassData(false);
     }
   };
 
@@ -103,23 +142,83 @@ export default function PresensiDashboard({ user, onLogout }) {
   }, []);
 
   useEffect(() => {
-    if (!selectedClass) {
-      setStudents([]);
-      return;
-    }
-
-    refreshAttendanceStatus(selectedClass, selectedDate);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedClass, selectedDate]);
-
-  useEffect(() => {
     if (!selectedClass || !selectedDate) {
+      setStudents([]);
       setMonthlySummaryRows([]);
+      setIsRefreshingClassData(false);
       return;
     }
 
-    loadMonthlySummary(selectedClass, selectedDate);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    let isCancelled = false;
+    const baseStudents = studentsByClass[selectedClass] || [];
+
+    setStudents(baseStudents.map((student) => ({
+      ...student,
+      status: student.status || 'Hadir',
+    })));
+    setIsRefreshingClassData(true);
+
+    const fetchSelectionData = async () => {
+      try {
+        setLoadError('');
+
+        const dateObj = new Date(`${selectedDate}T00:00:00`);
+        const bulan = dateObj.getMonth() + 1;
+        const tahun = dateObj.getFullYear();
+
+        const [statusByNis, summaryRows] = await Promise.all([
+          fetchPresensiStatusByDate({
+            tanggal: selectedDate,
+            kelas: selectedClass,
+          }),
+          fetchMonthlySummary({
+            kelas: selectedClass,
+            bulan,
+            tahun,
+          }),
+        ]);
+
+        if (isCancelled) {
+          return;
+        }
+
+        const updatedStudents = baseStudents.map((student) => ({
+          ...student,
+          status: statusByNis[student.nis] || student.status || 'Hadir',
+        }));
+
+        setStudents(updatedStudents);
+        setStudentsByClass((currentMap) => ({
+          ...currentMap,
+          [selectedClass]: updatedStudents,
+        }));
+        setMonthlySummaryRows(summaryRows);
+      } catch (error) {
+        if (isCancelled) {
+          return;
+        }
+
+        console.error('Gagal memuat data presensi kelas:', {
+          selectedClass,
+          selectedDate,
+          error: error?.message || error,
+        });
+        setLoadError('Gagal memuat data presensi dari spreadsheet.');
+        setStudents(baseStudents);
+        setMonthlySummaryRows([]);
+      } finally {
+        if (!isCancelled) {
+          setIsRefreshingClassData(false);
+        }
+      }
+    };
+
+    fetchSelectionData();
+
+    return () => {
+      isCancelled = true;
+      setIsRefreshingClassData(false);
+    };
   }, [selectedClass, selectedDate]);
 
   const monthLabel = new Date(selectedDate).toLocaleDateString('id-ID', {
@@ -128,33 +227,34 @@ export default function PresensiDashboard({ user, onLogout }) {
   });
 
   const effectiveDaysInMonth = useMemo(() => {
-    if (!selectedClass) return 0;
+    if (!selectedClass || !monthlySummaryRows.length) return 0;
 
-    const sourceRows = monthlySummaryRows.length ? monthlySummaryRows : students;
-    if (!sourceRows.length) return 0;
-
-    const totalAttendanceEntries = sourceRows.reduce((sum, row) => {
+    const validStudentCount = monthlySummaryRows.filter((row) => row?.nama || row?.name || row?.nis).length || 1;
+    const totalAttendanceEntries = monthlySummaryRows.reduce((sum, row) => {
+      const rowTotal = Number(row?.Total ?? 0);
       const statusKeys = ['Hadir', 'Izin', 'Sakit', 'Alpha'];
-      const rowTotal = statusKeys.reduce((innerSum, status) => {
+
+      if (rowTotal > 0) {
+        return sum + rowTotal;
+      }
+
+      const fallbackTotal = statusKeys.reduce((innerSum, status) => {
         const value = Number(row?.[status] ?? 0);
         return innerSum + (Number.isNaN(value) ? 0 : value);
       }, 0);
 
-      return sum + rowTotal;
+      return sum + fallbackTotal;
     }, 0);
-
-    const validStudentCount = sourceRows.filter((row) => row?.nama || row?.name || row?.nis).length || 1;
 
     if (!totalAttendanceEntries) return 0;
 
     return Math.max(Math.round(totalAttendanceEntries / validStudentCount), 1);
-  }, [monthlySummaryRows, selectedClass, students]);
+  }, [monthlySummaryRows, selectedClass]);
 
   const monthlyStatusCounts = useMemo(() => {
     const base = { Hadir: 0, Izin: 0, Sakit: 0, Alpha: 0 };
-    const sourceRows = monthlySummaryRows.length ? monthlySummaryRows : students;
 
-    sourceRows.forEach((row) => {
+    monthlySummaryRows.forEach((row) => {
       Object.keys(base).forEach((status) => {
         const value = Number(row?.[status] ?? 0);
         if (!Number.isNaN(value)) {
@@ -164,12 +264,16 @@ export default function PresensiDashboard({ user, onLogout }) {
     });
 
     return base;
-  }, [monthlySummaryRows, students]);
+  }, [monthlySummaryRows]);
 
-  const selectedClassStudentCount = monthlySummaryRows.length ? monthlySummaryRows.length : students.length;
-  const effectiveAttendanceDenominator = Math.max(selectedClassStudentCount * effectiveDaysInMonth, 1);
+  const selectedClassStudentCount = Math.max(monthlySummaryRows.length || students.length || 1, 1);
+  const effectiveAttendanceDenominator = monthLabel && monthlySummaryRows.length
+    ? Math.max(selectedClassStudentCount * effectiveDaysInMonth, 1)
+    : Math.max(selectedClassStudentCount, 1);
   const totalMonthlyStatus = Object.values(monthlyStatusCounts).reduce((sum, value) => sum + value, 0);
-  const attendanceRate = totalMonthlyStatus ? (monthlyStatusCounts.Hadir / effectiveAttendanceDenominator) * 100 : 0;
+  const attendanceRate = totalMonthlyStatus && effectiveAttendanceDenominator
+    ? (monthlyStatusCounts.Hadir / effectiveAttendanceDenominator) * 100
+    : 0;
   const monthlyStatusBreakdown = useMemo(() => {
     const entries = Object.entries(monthlyStatusCounts);
 
@@ -178,30 +282,6 @@ export default function PresensiDashboard({ user, onLogout }) {
       return acc;
     }, {});
   }, [effectiveAttendanceDenominator, monthlyStatusCounts]);
-
-  const loadMonthlySummary = async (currentClass = selectedClass, currentDate = selectedDate) => {
-    if (!currentClass || !currentDate) {
-      setMonthlySummaryRows([]);
-      return;
-    }
-
-    try {
-      const dateObj = new Date(`${currentDate}T00:00:00`);
-      const bulan = dateObj.getMonth() + 1;
-      const tahun = dateObj.getFullYear();
-
-      const summaryRows = await fetchMonthlySummary({
-        kelas: currentClass,
-        bulan,
-        tahun,
-      });
-
-      setMonthlySummaryRows(summaryRows);
-    } catch (error) {
-      console.error('Gagal memuat rekap bulan dari spreadsheet:', error);
-      setMonthlySummaryRows([]);
-    }
-  };
 
   const monthlyTableRows = activeTab === 'rekap' ? monthlySummaryRows : students;
 
@@ -234,12 +314,46 @@ export default function PresensiDashboard({ user, onLogout }) {
       };
 
       await savePresensi(payload);
-      alert('Data presensi berhasil disimpan.');
+      await refreshSelectedClassData({ className: selectedClass, targetDate: selectedDate });
+      alert('Data presensi berhasil disimpan dan status diperbarui.');
     } catch (error) {
       console.error('Gagal menyimpan presensi:', error);
       alert(error.message || 'Gagal menyimpan data presensi.');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleDownloadStudentTemplate = async () => {
+    try {
+      const result = await downloadSiswaImportTemplate();
+      alert(result?.message || 'Template Excel siswa berhasil diunduh.');
+    } catch (error) {
+      console.error('Gagal mengunduh template siswa:', error);
+      alert(error.message || 'Gagal mengunduh template siswa.');
+    }
+  };
+
+  const handleImportStudentsFromExcel = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
+
+    try {
+      setImportingStudents(true);
+      const result = await importSiswaFromExcelFile(file);
+      alert(result?.message || 'Data siswa berhasil diimpor.');
+      await loadStudents();
+      if (selectedClass && selectedDate) {
+        await refreshSelectedClassData({ className: selectedClass, targetDate: selectedDate });
+      }
+    } catch (error) {
+      console.error('Gagal mengimpor data siswa:', error);
+      alert(error.message || 'Gagal mengimpor data siswa.');
+    } finally {
+      setImportingStudents(false);
+      event.target.value = '';
     }
   };
 
@@ -401,6 +515,36 @@ export default function PresensiDashboard({ user, onLogout }) {
                     )}
                   </select>
                 </div>
+
+                <div className="presensi-field presensi-field--action">
+                  <label>&nbsp;</label>
+                  <button
+                    type="button"
+                    className="presensi-save-button presensi-save-button--secondary"
+                    onClick={handleDownloadStudentTemplate}
+                  >
+                    Download Template
+                  </button>
+                </div>
+
+                <div className="presensi-field presensi-field--action">
+                  <label>&nbsp;</label>
+                  <button
+                    type="button"
+                    className="presensi-save-button presensi-save-button--secondary"
+                    onClick={() => studentFileInputRef.current?.click()}
+                    disabled={importingStudents}
+                  >
+                    {importingStudents ? 'Mengimpor...' : 'Import Excel Siswa'}
+                  </button>
+                  <input
+                    ref={studentFileInputRef}
+                    type="file"
+                    accept=".xlsx,.xls,.csv"
+                    hidden
+                    onChange={handleImportStudentsFromExcel}
+                  />
+                </div>
               </div>
 
               <div className="presensi-mass-action">
@@ -416,6 +560,12 @@ export default function PresensiDashboard({ user, onLogout }) {
               <div className="presensi-table-wrap">
                 <div className="presensi-table-header">
                   <span>{students.length} Siswa Terdaftar</span>
+                  {isRefreshingClassData && (
+                    <span className="presensi-refresh-indicator" aria-live="polite">
+                      <span className="presensi-refresh-spinner" aria-hidden="true" />
+                      Memuat data kelas...
+                    </span>
+                  )}
                 </div>
 
                 {!selectedClass && !loadError && <p className="presensi-error-text">Memuat data kelas...</p>}

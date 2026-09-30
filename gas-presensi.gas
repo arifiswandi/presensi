@@ -1,29 +1,62 @@
-const PRESENSI_ROOT_FOLDER_NAME = 'Presensi';
-const PRESENSI_FOLDER_ID = '1kS9hXo_Eoeb4HgAoH8wtOSGSsKCl9udS'; // optional: jika diisi, folder ini dipakai sebagai root; kalau kosong otomatis dibuat
+const PRESENSI_FOLDER_ID = '1kS9hXo_Eoeb4HgAoH8wtOSGSsKCl9udS';
 const PRESENSI_FILE_PREFIX = 'Presensi_';
 const SISWA_FILE_PREFIX = 'Siswa_';
-
-// Isi ID spreadsheet utama jika Anda ingin tetap memakai spreadsheet yang spesifik.
-// Jika kosong, script akan otomatis membuat spreadsheet baru per bulan/tahun sesuai kebutuhan.
 const SPREADSHEET_ID = PropertiesService.getScriptProperties().getProperty('PRESENSI_SPREADSHEET_ID') || '';
 
-const MULTI_SPREADSHEET_IDS = {
-  default: SPREADSHEET_ID,
-  presensi: SPREADSHEET_ID,
-  siswa: SPREADSHEET_ID,
-  rekap: SPREADSHEET_ID,
-};
-
 function getDefaultSpreadsheetId() {
-  return (
-    PropertiesService.getScriptProperties().getProperty('PRESENSI_SPREADSHEET_ID') ||
-    SPREADSHEET_ID ||
-    ''
-  );
+  return PropertiesService.getScriptProperties().getProperty('PRESENSI_SPREADSHEET_ID') || SPREADSHEET_ID || '';
+}
+
+function coerceDateValue(dateValue) {
+  if (dateValue instanceof Date) {
+    return Number.isNaN(dateValue.getTime()) ? new Date() : dateValue;
+  }
+
+  if (dateValue && typeof dateValue === 'object') {
+    const candidateYear = Number(dateValue.year ?? dateValue.Year ?? dateValue.y ?? 0);
+    const candidateMonth = Number(dateValue.month ?? dateValue.Month ?? dateValue.m ?? 0);
+
+    if (Number.isFinite(candidateYear) && candidateYear > 0 && Number.isFinite(candidateMonth) && candidateMonth >= 1 && candidateMonth <= 12) {
+      return new Date(candidateYear, candidateMonth - 1, 1);
+    }
+  }
+
+  if (typeof dateValue === 'number' && Number.isFinite(dateValue)) {
+    if (dateValue >= 1 && dateValue <= 12) {
+      return new Date(new Date().getFullYear(), dateValue - 1, 1);
+    }
+    return new Date(dateValue);
+  }
+
+  if (typeof dateValue === 'string') {
+    const text = normalizeText(dateValue);
+    if (!text) {
+      return new Date();
+    }
+
+    const yearMonthMatch = text.match(/^(\d{4})[-/](\d{1,2})$/);
+    if (yearMonthMatch) {
+      const year = Number(yearMonthMatch[1]);
+      const month = Number(yearMonthMatch[2]);
+      if (Number.isFinite(year) && year > 0 && Number.isFinite(month) && month >= 1 && month <= 12) {
+        return new Date(year, month - 1, 1);
+      }
+    }
+
+    const numericMonth = Number(text);
+    if (!Number.isNaN(numericMonth) && numericMonth >= 1 && numericMonth <= 12) {
+      return new Date(new Date().getFullYear(), numericMonth - 1, 1);
+    }
+
+    const parsed = new Date(text);
+    return Number.isNaN(parsed.getTime()) ? new Date() : parsed;
+  }
+
+  return new Date(dateValue || Date.now());
 }
 
 function getMonthlySpreadsheetKey(dateValue) {
-  const sourceDate = dateValue ? new Date(dateValue) : new Date();
+  const sourceDate = coerceDateValue(dateValue);
 
   if (Number.isNaN(sourceDate.getTime())) {
     return Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM');
@@ -33,7 +66,7 @@ function getMonthlySpreadsheetKey(dateValue) {
 }
 
 function getAcademicYear(dateValue) {
-  const sourceDate = dateValue ? new Date(dateValue) : new Date();
+  const sourceDate = coerceDateValue(dateValue);
 
   if (Number.isNaN(sourceDate.getTime())) {
     return Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy');
@@ -63,11 +96,11 @@ function getPresensiRootFolder() {
     try {
       return DriveApp.getFolderById(PRESENSI_FOLDER_ID);
     } catch (error) {
-      return getOrCreateFolderByName(PRESENSI_ROOT_FOLDER_NAME, DriveApp.getRootFolder());
+      return DriveApp.getRootFolder();
     }
   }
 
-  return getOrCreateFolderByName(PRESENSI_ROOT_FOLDER_NAME, DriveApp.getRootFolder());
+  return DriveApp.getRootFolder();
 }
 
 function getAcademicYearFolder(dateValue) {
@@ -77,15 +110,42 @@ function getAcademicYearFolder(dateValue) {
   return getOrCreateFolderByName(yearFolderName, rootFolder);
 }
 
+function getPrimarySpreadsheetFileByName(folder, spreadsheetName) {
+  const allFiles = [];
+  const iterator = folder.getFilesByName(spreadsheetName);
+
+  while (iterator.hasNext()) {
+    allFiles.push(iterator.next());
+  }
+
+  if (!allFiles.length) {
+    return null;
+  }
+
+  if (allFiles.length > 1) {
+    allFiles.slice(1).forEach((file) => {
+      try {
+        file.setTrashed(true);
+      } catch (error) {
+        // ignore duplicate cleanup errors
+      }
+    });
+  }
+
+  return allFiles[0];
+}
+
 function getOrCreateMonthlySpreadsheet(dateValue) {
   const monthKey = getMonthlySpreadsheetKey(dateValue);
   const spreadsheetName = `${PRESENSI_FILE_PREFIX}${monthKey}`;
   const targetFolder = getAcademicYearFolder(dateValue);
 
-  const existingFiles = targetFolder.getFilesByName(spreadsheetName);
-  if (existingFiles.hasNext()) {
-    const existingFile = existingFiles.next();
-    return SpreadsheetApp.openById(existingFile.getId());
+  const existingFile = getPrimarySpreadsheetFileByName(targetFolder, spreadsheetName);
+  if (existingFile) {
+    const ss = SpreadsheetApp.openById(existingFile.getId());
+    const sheet = getOrCreateSheet(ss, 'Presensi');
+    ensureHeaderRow(sheet, ['timestamp', 'tanggal', 'kelas', 'nis', 'nama', 'status']);
+    return ss;
   }
 
   const newSpreadsheet = SpreadsheetApp.create(spreadsheetName);
@@ -95,7 +155,10 @@ function getOrCreateMonthlySpreadsheet(dateValue) {
     createdFile.moveTo(targetFolder);
   }
 
-  return SpreadsheetApp.openById(createdFile.getId());
+  const ss = SpreadsheetApp.openById(createdFile.getId());
+  const sheet = getOrCreateSheet(ss, 'Presensi');
+  ensureHeaderRow(sheet, ['timestamp', 'tanggal', 'kelas', 'nis', 'nama', 'status']);
+  return ss;
 }
 
 function getOrCreateSiswaSpreadsheet(dateValue) {
@@ -103,10 +166,12 @@ function getOrCreateSiswaSpreadsheet(dateValue) {
   const spreadsheetName = `${SISWA_FILE_PREFIX}${academicYear}`;
   const targetFolder = getAcademicYearFolder(dateValue);
 
-  const existingFiles = targetFolder.getFilesByName(spreadsheetName);
-  if (existingFiles.hasNext()) {
-    const existingFile = existingFiles.next();
-    return SpreadsheetApp.openById(existingFile.getId());
+  const existingFile = getPrimarySpreadsheetFileByName(targetFolder, spreadsheetName);
+  if (existingFile) {
+    const ss = SpreadsheetApp.openById(existingFile.getId());
+    const sheet = getOrCreateSheet(ss, 'Siswa');
+    ensureHeaderRow(sheet, ['ID', 'KELAS', 'NIS', 'NAMA', 'L/P']);
+    return ss;
   }
 
   const newSpreadsheet = SpreadsheetApp.create(spreadsheetName);
@@ -116,7 +181,10 @@ function getOrCreateSiswaSpreadsheet(dateValue) {
     createdFile.moveTo(targetFolder);
   }
 
-  return SpreadsheetApp.openById(createdFile.getId());
+  const ss = SpreadsheetApp.openById(createdFile.getId());
+  const sheet = getOrCreateSheet(ss, 'Siswa');
+  ensureHeaderRow(sheet, ['ID', 'KELAS', 'NIS', 'NAMA', 'L/P']);
+  return ss;
 }
 
 function getSpreadsheet(spreadsheetTarget, dateValue) {
@@ -124,10 +192,7 @@ function getSpreadsheet(spreadsheetTarget, dateValue) {
   const defaultId = getDefaultSpreadsheetId();
 
   if (!normalizedTarget || normalizedTarget === 'default') {
-    if (defaultId) {
-      return SpreadsheetApp.openById(defaultId);
-    }
-    return getOrCreateMonthlySpreadsheet(dateValue || new Date());
+    return defaultId ? SpreadsheetApp.openById(defaultId) : getOrCreateMonthlySpreadsheet(dateValue || new Date());
   }
 
   if (
@@ -146,19 +211,11 @@ function getSpreadsheet(spreadsheetTarget, dateValue) {
     return getOrCreateMonthlySpreadsheet(normalizedTarget);
   }
 
-  if (MULTI_SPREADSHEET_IDS[normalizedTarget]) {
-    return SpreadsheetApp.openById(MULTI_SPREADSHEET_IDS[normalizedTarget]);
-  }
-
   if (normalizedTarget.length >= 20) {
     return SpreadsheetApp.openById(normalizedTarget);
   }
 
-  if (defaultId) {
-    return SpreadsheetApp.openById(defaultId);
-  }
-
-  return getOrCreateMonthlySpreadsheet(dateValue || new Date());
+  return defaultId ? SpreadsheetApp.openById(defaultId) : getOrCreateMonthlySpreadsheet(dateValue || new Date());
 }
 
 function getRequestSpreadsheetTarget(data, fallback) {
@@ -183,11 +240,26 @@ function responseJSON(payload) {
 }
 
 function getOrCreateSheet(ss, sheetName) {
-  let sheet = ss.getSheetByName(sheetName);
-  if (!sheet) {
-    sheet = ss.insertSheet(sheetName);
+  if (sheetName === 'Sheet1') {
+    return ss.getSheetByName('Sheet1') || ss.insertSheet('Sheet1');
   }
-  return sheet;
+
+  const existingSheet = ss.getSheetByName(sheetName);
+  if (existingSheet) {
+    return existingSheet;
+  }
+
+  const defaultSheet = ss.getSheetByName('Sheet1');
+  if (defaultSheet) {
+    if (ss.getSheets().length === 1) {
+      defaultSheet.setName(sheetName);
+      return defaultSheet;
+    }
+
+    ss.deleteSheet(defaultSheet);
+  }
+
+  return ss.insertSheet(sheetName);
 }
 
 function ensureHeaderRow(sheet, headers) {
@@ -280,27 +352,108 @@ function buildPresensiKey(tanggal, kelas, nis) {
   return `${normalizeDateValue(tanggal)}|${normalizeText(kelas)}|${normalizeNis(nis)}`;
 }
 
-function findExistingPresensiRow(rows, tanggal, kelas, nis) {
-  const targetDate = normalizeDateValue(tanggal);
-  const targetClass = normalizeText(kelas);
-  const targetNis = normalizeNis(nis);
-
-  for (let i = 1; i < rows.length; i += 1) {
-    const row = rows[i];
-    if (!row || row.length < 6) {
-      continue;
-    }
-
-    const rowDate = normalizeDateValue(row[1]);
-    const rowKelas = normalizeText(row[2]);
-    const rowNis = normalizeNis(row[3]);
-
-    if (rowDate === targetDate && rowKelas === targetClass && rowNis === targetNis) {
-      return i + 1;
-    }
+function normalizeSiswaRecord(item) {
+  if (!item || typeof item !== 'object') {
+    return null;
   }
 
-  return 0;
+  const kelas = normalizeText(
+    item.kelas ?? item.KELAS ?? item.Kelas ?? item.kls ?? item.class ?? item['KELAS'] ?? ''
+  );
+  const nis = normalizeNis(
+    item.nis ?? item.NIS ?? item.Nis ?? item.nisn ?? item['NIS'] ?? ''
+  );
+  const nama = normalizeText(
+    item.nama ?? item.NAMA ?? item.Nama ?? item.name ?? item.NamaSiswa ?? item['NAMA'] ?? ''
+  );
+  const jenisKelaminValue = (
+    item.jenisKelamin ??
+    item.JenisKelamin ??
+    item.JENISKELAMIN ??
+    item.gender ??
+    item.Gender ??
+    item.GENDER ??
+    item.jk ??
+    item.JK ??
+    item['L/P'] ??
+    item['L / P'] ??
+    item['Jenis Kelamin'] ??
+    item['JENIS KELAMIN'] ??
+    ''
+  );
+  const jenisKelamin = normalizeJenisKelamin(jenisKelaminValue);
+
+  if (!kelas && !nis && !nama) {
+    return null;
+  }
+
+  return {
+    id: normalizeText(item.id ?? item.ID ?? item['ID'] ?? ''),
+    kelas,
+    nis,
+    nama,
+    jenisKelamin,
+  };
+}
+
+function createSiswaSpreadsheet(dateValue) {
+  const spreadsheet = getOrCreateSiswaSpreadsheet(dateValue || new Date());
+
+  return {
+    success: true,
+    spreadsheetId: spreadsheet.getId(),
+    spreadsheetName: spreadsheet.getName(),
+    message: 'Spreadsheet siswa berhasil dibuat.',
+  };
+}
+
+function importSiswaData(ss, payload) {
+  const rawRows = Array.isArray(payload?.siswaData)
+    ? payload.siswaData
+    : Array.isArray(payload?.data)
+      ? payload.data
+      : [];
+
+  if (!rawRows.length) {
+    return { success: false, message: 'Tidak ada data siswa yang dikirim untuk diimpor.' };
+  }
+
+  const sheet = getOrCreateSheet(ss, 'Siswa');
+  ensureHeaderRow(sheet, ['ID', 'KELAS', 'NIS', 'NAMA', 'L/P']);
+
+  const existingRows = sheet.getDataRange().getValues();
+  const seenNis = new Set();
+
+  existingRows.slice(1).forEach((row) => {
+    if (!row || !row[2]) {
+      return;
+    }
+    seenNis.add(normalizeNis(row[2]));
+  });
+
+  const newRows = rawRows
+    .map((item) => normalizeSiswaRecord(item))
+    .filter((item) => item && item.nis && !seenNis.has(item.nis))
+    .map((item) => [
+      item.id || '',
+      item.kelas,
+      item.nis,
+      item.nama,
+      item.jenisKelamin,
+    ]);
+
+  if (!newRows.length) {
+    return { success: true, imported: 0, message: 'Tidak ada data siswa baru yang perlu ditambahkan.' };
+  }
+
+  const startRow = sheet.getLastRow() + 1;
+  sheet.getRange(startRow, 1, newRows.length, 5).setValues(newRows);
+
+  return {
+    success: true,
+    imported: newRows.length,
+    message: `Berhasil menambahkan ${newRows.length} data siswa baru.`,
+  };
 }
 
 function getSiswaData(ss) {
@@ -347,9 +500,26 @@ function simpanPresensi(ss, payload) {
   const normalizedTanggal = normalizeDateValue(payload.tanggal);
   const normalizedKelas = normalizeText(payload.kelas);
   const seen = new Set();
+  const existingRowIndexByKey = new Map();
   let savedCount = 0;
 
   const rows = sheet.getDataRange().getValues();
+
+  rows.slice(1).forEach((row, index) => {
+    if (!row || row.length < 6) {
+      return;
+    }
+
+    const rowDate = normalizeDateValue(row[1]);
+    const rowKelas = normalizeText(row[2]);
+    const rowNis = normalizeNis(row[3]);
+
+    if (!rowDate || !rowKelas || !rowNis) {
+      return;
+    }
+
+    existingRowIndexByKey.set(buildPresensiKey(rowDate, rowKelas, rowNis), index + 2);
+  });
 
   attendanceList.forEach((item) => {
     if (!item || !item.nis) {
@@ -366,7 +536,6 @@ function simpanPresensi(ss, payload) {
     }
     seen.add(key);
 
-    const existingRowIndex = findExistingPresensiRow(rows, normalizedTanggal, normalizedKelas, nis);
     const rowData = [
       formattedTimestamp,
       normalizedTanggal,
@@ -375,6 +544,8 @@ function simpanPresensi(ss, payload) {
       nama,
       status,
     ];
+
+    const existingRowIndex = existingRowIndexByKey.get(key) || 0;
 
     if (existingRowIndex > 0) {
       sheet.getRange(existingRowIndex, 1, 1, rowData.length).setValues([rowData]);
@@ -499,7 +670,11 @@ function getRekapData(ss, params) {
 
   cleanupDuplicatePresensi(ss);
 
-  const sheetSiswa = getOrCreateSheet(ss, 'Siswa');
+  const siswaSpreadsheet = getOrCreateSiswaSpreadsheet({
+    year: tahun,
+    month: bulan,
+  });
+  const sheetSiswa = getOrCreateSheet(siswaSpreadsheet, 'Siswa');
   const dataSiswa = sheetSiswa.getDataRange().getValues();
   if (dataSiswa.length <= 1) {
     return { success: true, data: [] };
@@ -589,37 +764,55 @@ function getRekapData(ss, params) {
   return { success: true, data: Object.values(rekapMap) };
 }
 
+function resolveActionTarget(data, action) {
+  const fallbackTarget = ['getSiswa', 'createSiswaSpreadsheet', 'importSiswa'].includes(action)
+    ? 'siswa'
+    : ['simpanPresensi', 'getRekap', 'getPresensiByDate', 'cleanupDuplicatePresensi'].includes(action)
+      ? 'monthly'
+      : 'default';
+
+  return getRequestSpreadsheetTarget(data, fallbackTarget);
+}
+
+function executeAction(data, action) {
+  const spreadsheetTarget = resolveActionTarget(data, action);
+  const ss = getSpreadsheet(spreadsheetTarget, data && (data.tanggal || data.date || data.bulan));
+
+  if (action === 'getSiswa') {
+    return responseJSON({ success: true, data: getSiswaData(ss) });
+  }
+
+  if (action === 'createSiswaSpreadsheet') {
+    return responseJSON(createSiswaSpreadsheet(data && (data.tanggal || data.date || data.bulan)));
+  }
+
+  if (action === 'importSiswa') {
+    return responseJSON(importSiswaData(ss, data));
+  }
+
+  if (action === 'simpanPresensi') {
+    return responseJSON(simpanPresensi(ss, data));
+  }
+
+  if (action === 'getRekap') {
+    return responseJSON(getRekapData(ss, data));
+  }
+
+  if (action === 'getPresensiByDate') {
+    return responseJSON(getPresensiByDate(ss, data));
+  }
+
+  if (action === 'cleanupDuplicatePresensi') {
+    return responseJSON(cleanupDuplicatePresensi(ss));
+  }
+
+  return responseJSON({ success: false, message: 'Aksi tidak valid.' });
+}
+
 function doGet(e) {
   try {
     const params = (e && e.parameter) ? e.parameter : {};
-    const action = params.action || '';
-    const spreadsheetTarget = getRequestSpreadsheetTarget(
-      params,
-      action === 'getSiswa' ? 'siswa' : (
-        ['simpanPresensi', 'getRekap', 'getPresensiByDate', 'cleanupDuplicatePresensi'].includes(action)
-          ? 'monthly'
-          : 'default'
-      )
-    );
-    const ss = getSpreadsheet(spreadsheetTarget, params.tanggal || params.date || params.bulan);
-
-    if (action === 'getSiswa') {
-      return responseJSON({ success: true, data: getSiswaData(ss) });
-    }
-
-    if (action === 'getRekap') {
-      return responseJSON(getRekapData(ss, params));
-    }
-
-    if (action === 'getPresensiByDate') {
-      return responseJSON(getPresensiByDate(ss, params));
-    }
-
-    if (action === 'cleanupDuplicatePresensi') {
-      return responseJSON(cleanupDuplicatePresensi(ss));
-    }
-
-    return responseJSON({ success: false, message: 'Aksi GET tidak valid.' });
+    return executeAction(params, params.action || '');
   } catch (error) {
     return responseJSON({
       success: false,
@@ -632,38 +825,7 @@ function doPost(e) {
   try {
     const raw = (e && e.postData && e.postData.contents) ? e.postData.contents : '';
     const payload = raw ? JSON.parse(raw) : {};
-    const action = payload.action || '';
-    const spreadsheetTarget = getRequestSpreadsheetTarget(
-      payload,
-      action === 'getSiswa' ? 'siswa' : (
-        ['simpanPresensi', 'getRekap', 'getPresensiByDate', 'cleanupDuplicatePresensi'].includes(action)
-          ? 'monthly'
-          : 'default'
-      )
-    );
-    const ss = getSpreadsheet(spreadsheetTarget, payload.tanggal || payload.date || payload.bulan);
-
-    if (action === 'getSiswa') {
-      return responseJSON({ success: true, data: getSiswaData(ss) });
-    }
-
-    if (action === 'simpanPresensi') {
-      return responseJSON(simpanPresensi(ss, payload));
-    }
-
-    if (action === 'getRekap') {
-      return responseJSON(getRekapData(ss, payload));
-    }
-
-    if (action === 'getPresensiByDate') {
-      return responseJSON(getPresensiByDate(ss, payload));
-    }
-
-    if (action === 'cleanupDuplicatePresensi') {
-      return responseJSON(cleanupDuplicatePresensi(ss));
-    }
-
-    return responseJSON({ success: false, message: 'Aksi POST tidak valid.' });
+    return executeAction(payload, payload.action || '');
   } catch (error) {
     return responseJSON({
       success: false,

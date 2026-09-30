@@ -78,8 +78,17 @@ export const fetchMonthlySummary = async ({ kelas, bulan, tahun }) => {
   }
 };
 
-export const savePresensi = async (payload) => {
-  const data = await postToGas({ action: 'simpanAbsensi', ...payload }, 'Simpan data presensi');
+export const savePresensi = async (payload = {}) => {
+  const normalizedPayload = {
+    action: 'simpanAbsensi',
+    tanggal: payload.tanggal,
+    kelas: payload.kelas,
+    absensiData: Array.isArray(payload.absensiData)
+      ? payload.absensiData
+      : (Array.isArray(payload.presensiData) ? payload.presensiData : []),
+  };
+
+  const data = await postToGas(normalizedPayload, 'Simpan data presensi');
 
   if (data.success === false) {
     throw new Error(data.message || 'Gagal menyimpan data presensi.');

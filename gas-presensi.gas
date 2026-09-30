@@ -1,7 +1,161 @@
-const SPREADSHEET_ID = '1zTyZYChQwcut2kP_vzmZETON-pxjiA7fymOqmt4CiFc';
+const PRESENSI_ROOT_FOLDER_NAME = 'Presensi';
+const PRESENSI_FOLDER_ID = ''; // optional: jika diisi, folder ini dipakai sebagai root; kalau kosong otomatis dibuat
+const PRESENSI_FILE_PREFIX = 'Presensi_';
+const SISWA_FILE_PREFIX = 'Siswa_';
 
-function getSpreadsheet() {
-  return SpreadsheetApp.openById(SPREADSHEET_ID);
+const MULTI_SPREADSHEET_IDS = {
+  default: SPREADSHEET_ID,
+  presensi: SPREADSHEET_ID,
+  siswa: SPREADSHEET_ID,
+  rekap: SPREADSHEET_ID,
+};
+
+function getMonthlySpreadsheetKey(dateValue) {
+  const sourceDate = dateValue ? new Date(dateValue) : new Date();
+
+  if (Number.isNaN(sourceDate.getTime())) {
+    return Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM');
+  }
+
+  return Utilities.formatDate(sourceDate, Session.getScriptTimeZone(), 'yyyy-MM');
+}
+
+function getAcademicYear(dateValue) {
+  const sourceDate = dateValue ? new Date(dateValue) : new Date();
+
+  if (Number.isNaN(sourceDate.getTime())) {
+    return Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy');
+  }
+
+  const year = sourceDate.getFullYear();
+  const month = sourceDate.getMonth() + 1;
+  const startYear = month >= 7 ? year : year - 1;
+  const endYear = startYear + 1;
+
+  return `${startYear}-${endYear}`;
+}
+
+function getOrCreateFolderByName(folderName, parentFolder) {
+  const rootFolder = parentFolder || DriveApp.getRootFolder();
+  const folders = rootFolder.getFoldersByName(folderName);
+
+  if (folders.hasNext()) {
+    return folders.next();
+  }
+
+  return rootFolder.createFolder(folderName);
+}
+
+function getPresensiRootFolder() {
+  if (PRESENSI_FOLDER_ID) {
+    try {
+      return DriveApp.getFolderById(PRESENSI_FOLDER_ID);
+    } catch (error) {
+      return getOrCreateFolderByName(PRESENSI_ROOT_FOLDER_NAME, DriveApp.getRootFolder());
+    }
+  }
+
+  return getOrCreateFolderByName(PRESENSI_ROOT_FOLDER_NAME, DriveApp.getRootFolder());
+}
+
+function getAcademicYearFolder(dateValue) {
+  const yearFolderName = getAcademicYear(dateValue);
+  const rootFolder = getPresensiRootFolder();
+
+  return getOrCreateFolderByName(yearFolderName, rootFolder);
+}
+
+function getOrCreateMonthlySpreadsheet(dateValue) {
+  const monthKey = getMonthlySpreadsheetKey(dateValue);
+  const spreadsheetName = `${PRESENSI_FILE_PREFIX}${monthKey}`;
+  const targetFolder = getAcademicYearFolder(dateValue);
+
+  const existingFiles = targetFolder.getFilesByName(spreadsheetName);
+  if (existingFiles.hasNext()) {
+    const existingFile = existingFiles.next();
+    return SpreadsheetApp.openById(existingFile.getId());
+  }
+
+  const newSpreadsheet = SpreadsheetApp.create(spreadsheetName);
+  const createdFile = DriveApp.getFileById(newSpreadsheet.getId());
+
+  if (createdFile.getParents().next().getId() !== targetFolder.getId()) {
+    createdFile.moveTo(targetFolder);
+  }
+
+  return SpreadsheetApp.openById(createdFile.getId());
+}
+
+function getOrCreateSiswaSpreadsheet(dateValue) {
+  const academicYear = getAcademicYear(dateValue);
+  const spreadsheetName = `${SISWA_FILE_PREFIX}${academicYear}`;
+  const targetFolder = getAcademicYearFolder(dateValue);
+
+  const existingFiles = targetFolder.getFilesByName(spreadsheetName);
+  if (existingFiles.hasNext()) {
+    const existingFile = existingFiles.next();
+    return SpreadsheetApp.openById(existingFile.getId());
+  }
+
+  const newSpreadsheet = SpreadsheetApp.create(spreadsheetName);
+  const createdFile = DriveApp.getFileById(newSpreadsheet.getId());
+
+  if (createdFile.getParents().next().getId() !== targetFolder.getId()) {
+    createdFile.moveTo(targetFolder);
+  }
+
+  return SpreadsheetApp.openById(createdFile.getId());
+}
+
+function getSpreadsheet(spreadsheetTarget, dateValue) {
+  const normalizedTarget = (spreadsheetTarget == null ? '' : String(spreadsheetTarget).trim());
+
+  if (!normalizedTarget || normalizedTarget === 'default') {
+    return SpreadsheetApp.openById(MULTI_SPREADSHEET_IDS.default);
+  }
+
+  if (
+    normalizedTarget === 'monthly' ||
+    normalizedTarget === 'presensi' ||
+    normalizedTarget === 'rekap'
+  ) {
+    return getOrCreateMonthlySpreadsheet(dateValue);
+  }
+
+  if (normalizedTarget === 'siswa') {
+    return getOrCreateSiswaSpreadsheet(dateValue);
+  }
+
+  if (/^\d{4}-\d{2}$/.test(normalizedTarget)) {
+    return getOrCreateMonthlySpreadsheet(normalizedTarget);
+  }
+
+  if (MULTI_SPREADSHEET_IDS[normalizedTarget]) {
+    return SpreadsheetApp.openById(MULTI_SPREADSHEET_IDS[normalizedTarget]);
+  }
+
+  if (normalizedTarget.length >= 20) {
+    return SpreadsheetApp.openById(normalizedTarget);
+  }
+
+  return SpreadsheetApp.openById(MULTI_SPREADSHEET_IDS.default);
+}
+
+function getRequestSpreadsheetTarget(data, fallback) {
+  if (!data || typeof data !== 'object') {
+    return fallback || 'default';
+  }
+
+  return (
+    data.spreadsheetId ||
+    data.spreadsheet ||
+    data.spreadsheetKey ||
+    data.spreadsheet_name ||
+    data.spreadsheetTarget ||
+    data.monthly ||
+    fallback ||
+    'default'
+  );
 }
 
 function responseJSON(payload) {
@@ -115,13 +269,15 @@ function simpanAbsensi(ss, payload) {
     return { success: false, message: 'Tanggal dan kelas wajib diisi.' };
   }
 
-  const sheet = getOrCreateSheet(ss, 'Absensi');
+  const sheet = getOrCreateSheet(ss, 'Presensi');
   ensureHeaderRow(sheet, ['timestamp', 'tanggal', 'kelas', 'nis', 'nama', 'status']);
 
-  const attendanceList = Array.isArray(payload.absensiData) ? payload.absensiData : [];
+  const attendanceList = Array.isArray(payload.absensiData)
+    ? payload.absensiData
+    : (Array.isArray(payload.presensiData) ? payload.presensiData : []);
 
   if (!attendanceList.length) {
-    return { success: false, message: 'Tidak ada data absensi yang dikirim.' };
+    return { success: false, message: 'Tidak ada data presensi yang dikirim.' };
   }
 
   const savedAt = new Date();
@@ -169,7 +325,7 @@ function simpanAbsensi(ss, payload) {
 
   return {
     success: true,
-    message: `Data absensi berhasil disimpan (${savedCount} siswa).`,
+    message: `Data presensi berhasil disimpan (${savedCount} siswa).`,
     savedCount,
   };
 }
@@ -182,7 +338,7 @@ function getAbsensiByDate(ss, params) {
     return { success: false, message: 'Tanggal dan kelas wajib diisi.' };
   }
 
-  const sheet = getOrCreateSheet(ss, 'Absensi');
+  const sheet = getOrCreateSheet(ss, 'Presensi');
   const rows = sheet.getDataRange().getValues();
 
   if (rows.length <= 1) {
@@ -214,11 +370,11 @@ function getAbsensiByDate(ss, params) {
 }
 
 function cleanupDuplicateAbsensi(ss) {
-  const sheet = getOrCreateSheet(ss, 'Absensi');
+  const sheet = getOrCreateSheet(ss, 'Presensi');
   const values = sheet.getDataRange().getValues();
 
   if (values.length <= 1) {
-    return { success: true, removed: 0, message: 'Tidak ada data absensi untuk dibersihkan.' };
+    return { success: true, removed: 0, message: 'Tidak ada data presensi untuk dibersihkan.' };
   }
 
   const lastRowByKey = new Map();
@@ -266,7 +422,7 @@ function cleanupDuplicateAbsensi(ss) {
   return {
     success: true,
     removed: finalRowsToDelete.length,
-    message: `Berhasil membersihkan ${finalRowsToDelete.length} data duplikat pada sheet Absensi.`,
+    message: `Berhasil membersihkan ${finalRowsToDelete.length} data duplikat pada sheet Presensi.`,
   };
 }
 
@@ -295,10 +451,10 @@ function getRekapData(ss, params) {
     }))
     .filter((row) => row.nis);
 
-  const sheetAbsensi = getOrCreateSheet(ss, 'Absensi');
-  const dataAbsensi = sheetAbsensi.getDataRange().getValues();
+  const sheetPresensi = getOrCreateSheet(ss, 'Presensi');
+  const dataPresensi = sheetPresensi.getDataRange().getValues();
 
-  if (dataAbsensi.length <= 1) {
+  if (dataPresensi.length <= 1) {
     return { success: true, data: siswaKelas.map((siswa) => ({
       nis: siswa.nis,
       nama: siswa.nama,
@@ -325,7 +481,7 @@ function getRekapData(ss, params) {
 
   const uniqueKeys = new Set();
 
-  dataAbsensi.slice(1).forEach((row) => {
+  dataPresensi.slice(1).forEach((row) => {
     if (!row || row.length < 6) {
       return;
     }
@@ -372,35 +528,58 @@ function getRekapData(ss, params) {
 }
 
 function doGet(e) {
-  const ss = getSpreadsheet();
-  const action = (e && e.parameter && e.parameter.action) || '';
+  try {
+    const params = (e && e.parameter) ? e.parameter : {};
+    const action = params.action || '';
+    const spreadsheetTarget = getRequestSpreadsheetTarget(
+      params,
+      action === 'getSiswa' ? 'siswa' : (
+        ['simpanAbsensi', 'getRekap', 'getAbsensiByDate', 'cleanupDuplicateAbsensi'].includes(action)
+          ? 'monthly'
+          : 'default'
+      )
+    );
+    const ss = getSpreadsheet(spreadsheetTarget, params.tanggal || params.date || params.bulan);
 
-  if (action === 'getSiswa') {
-    return responseJSON({ success: true, data: getSiswaData(ss) });
+    if (action === 'getSiswa') {
+      return responseJSON({ success: true, data: getSiswaData(ss) });
+    }
+
+    if (action === 'getRekap') {
+      return responseJSON(getRekapData(ss, params));
+    }
+
+    if (action === 'getAbsensiByDate') {
+      return responseJSON(getAbsensiByDate(ss, params));
+    }
+
+    if (action === 'cleanupDuplicateAbsensi') {
+      return responseJSON(cleanupDuplicateAbsensi(ss));
+    }
+
+    return responseJSON({ success: false, message: 'Aksi GET tidak valid.' });
+  } catch (error) {
+    return responseJSON({
+      success: false,
+      message: error && error.message ? error.message : String(error),
+    });
   }
-
-  if (action === 'getRekap') {
-    return responseJSON(getRekapData(ss, e.parameter));
-  }
-
-  if (action === 'getAbsensiByDate') {
-    return responseJSON(getAbsensiByDate(ss, e.parameter));
-  }
-
-  if (action === 'cleanupDuplicateAbsensi') {
-    return responseJSON(cleanupDuplicateAbsensi(ss));
-  }
-
-  return responseJSON({ success: false, message: 'Aksi GET tidak valid.' });
 }
 
 function doPost(e) {
-  const ss = getSpreadsheet();
-
   try {
     const raw = (e && e.postData && e.postData.contents) ? e.postData.contents : '';
     const payload = raw ? JSON.parse(raw) : {};
-    const action = payload.action;
+    const action = payload.action || '';
+    const spreadsheetTarget = getRequestSpreadsheetTarget(
+      payload,
+      action === 'getSiswa' ? 'siswa' : (
+        ['simpanAbsensi', 'getRekap', 'getAbsensiByDate', 'cleanupDuplicateAbsensi'].includes(action)
+          ? 'monthly'
+          : 'default'
+      )
+    );
+    const ss = getSpreadsheet(spreadsheetTarget, payload.tanggal || payload.date || payload.bulan);
 
     if (action === 'getSiswa') {
       return responseJSON({ success: true, data: getSiswaData(ss) });

@@ -2,10 +2,8 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import './PresensiDashboard.css';
 import {
-  ATTENDANCE_RATE,
   ATTENDANCE_OPTIONS,
   STATUS_CLASS_MAP,
-  TOTAL_SESSIONS,
 } from '../constants';
 import {
   fetchMonthlySummary,
@@ -115,18 +113,71 @@ export default function PresensiDashboard({ user, onLogout }) {
   }, [selectedClass, selectedDate]);
 
   useEffect(() => {
-    if (activeTab !== 'rekap') {
+    if (!selectedClass || !selectedDate) {
+      setMonthlySummaryRows([]);
       return;
     }
 
     loadMonthlySummary(selectedClass, selectedDate);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, selectedClass, selectedDate]);
+  }, [selectedClass, selectedDate]);
 
   const monthLabel = new Date(selectedDate).toLocaleDateString('id-ID', {
     month: 'long',
     year: 'numeric',
   });
+
+  const effectiveDaysInMonth = useMemo(() => {
+    if (!selectedClass) return 0;
+
+    const sourceRows = monthlySummaryRows.length ? monthlySummaryRows : students;
+    if (!sourceRows.length) return 0;
+
+    const totalAttendanceEntries = sourceRows.reduce((sum, row) => {
+      const statusKeys = ['Hadir', 'Izin', 'Sakit', 'Alpha'];
+      const rowTotal = statusKeys.reduce((innerSum, status) => {
+        const value = Number(row?.[status] ?? 0);
+        return innerSum + (Number.isNaN(value) ? 0 : value);
+      }, 0);
+
+      return sum + rowTotal;
+    }, 0);
+
+    const validStudentCount = sourceRows.filter((row) => row?.nama || row?.name || row?.nis).length || 1;
+
+    if (!totalAttendanceEntries) return 0;
+
+    return Math.max(Math.round(totalAttendanceEntries / validStudentCount), 1);
+  }, [monthlySummaryRows, selectedClass, students]);
+
+  const monthlyStatusCounts = useMemo(() => {
+    const base = { Hadir: 0, Izin: 0, Sakit: 0, Alpha: 0 };
+    const sourceRows = monthlySummaryRows.length ? monthlySummaryRows : students;
+
+    sourceRows.forEach((row) => {
+      Object.keys(base).forEach((status) => {
+        const value = Number(row?.[status] ?? 0);
+        if (!Number.isNaN(value)) {
+          base[status] += value;
+        }
+      });
+    });
+
+    return base;
+  }, [monthlySummaryRows, students]);
+
+  const selectedClassStudentCount = monthlySummaryRows.length ? monthlySummaryRows.length : students.length;
+  const effectiveAttendanceDenominator = Math.max(selectedClassStudentCount * effectiveDaysInMonth, 1);
+  const totalMonthlyStatus = Object.values(monthlyStatusCounts).reduce((sum, value) => sum + value, 0);
+  const attendanceRate = totalMonthlyStatus ? (monthlyStatusCounts.Hadir / effectiveAttendanceDenominator) * 100 : 0;
+  const monthlyStatusBreakdown = useMemo(() => {
+    const entries = Object.entries(monthlyStatusCounts);
+
+    return entries.reduce((acc, [status, total]) => {
+      acc[status] = effectiveAttendanceDenominator ? (total / effectiveAttendanceDenominator) * 100 : 0;
+      return acc;
+    }, {});
+  }, [effectiveAttendanceDenominator, monthlyStatusCounts]);
 
   const loadMonthlySummary = async (currentClass = selectedClass, currentDate = selectedDate) => {
     if (!currentClass || !currentDate) {
@@ -151,22 +202,6 @@ export default function PresensiDashboard({ user, onLogout }) {
       setMonthlySummaryRows([]);
     }
   };
-
-  const monthlyStatusCounts = useMemo(() => {
-    const base = { Hadir: 0, Izin: 0, Sakit: 0, Alpha: 0 };
-    const sourceRows = activeTab === 'rekap' ? monthlySummaryRows : students;
-
-    sourceRows.forEach((row) => {
-      Object.entries(base).forEach(([status, total]) => {
-        const value = Number(row?.[status] ?? 0);
-        if (!Number.isNaN(value)) {
-          base[status] = total + value;
-        }
-      });
-    });
-
-    return base;
-  }, [activeTab, monthlySummaryRows, students]);
 
   const monthlyTableRows = activeTab === 'rekap' ? monthlySummaryRows : students;
 
@@ -238,15 +273,22 @@ export default function PresensiDashboard({ user, onLogout }) {
 
           <article className="presensi-stat-card">
             <span className="presensi-stat-label">Rata-Rata Kehadiran</span>
-            <strong className="presensi-stat-value">{ATTENDANCE_RATE}%</strong>
+            <strong className="presensi-stat-value">{Number(attendanceRate.toFixed(1))}%</strong>
+            <div className="presensi-stat-effective-box">
+              <span>Hari efektif</span>
+              <strong>{effectiveDaysInMonth} hari</strong>
+            </div>
             <small className="presensi-stat-meta">Bulan {monthLabel}</small>
+            <small className="presensi-stat-meta presensi-stat-meta--sub">Berdasarkan data absensi</small>
+            <div className="presensi-stat-breakdown">
+              {Object.entries(monthlyStatusBreakdown).map(([status, value]) => (
+                <span key={status} className="presensi-stat-breakdown-item">
+                  {status}: {Number(value.toFixed(1))}%
+                </span>
+              ))}
+            </div>
           </article>
 
-          <article className="presensi-stat-card">
-            <span className="presensi-stat-label">Total Sesi Presensi</span>
-            <strong className="presensi-stat-value">{TOTAL_SESSIONS}</strong>
-            <small className="presensi-stat-meta">Tercatat di Sistem</small>
-          </article>
         </section>
 
         <div className="presensi-mode-switcher">
@@ -281,14 +323,22 @@ export default function PresensiDashboard({ user, onLogout }) {
                 <article className="presensi-rekap-card presensi-rekap-card--hadir">
                   <span>Hadir</span>
                   <strong>{monthlyStatusCounts.Hadir}</strong>
+                  <small>{Number((monthlyStatusBreakdown.Hadir ?? 0).toFixed(1))}%</small>
                 </article>
                 <article className="presensi-rekap-card presensi-rekap-card--izin">
                   <span>Izin</span>
                   <strong>{monthlyStatusCounts.Izin}</strong>
+                  <small>{Number((monthlyStatusBreakdown.Izin ?? 0).toFixed(1))}%</small>
+                </article>
+                <article className="presensi-rekap-card presensi-rekap-card--sakit">
+                  <span>Sakit</span>
+                  <strong>{monthlyStatusCounts.Sakit}</strong>
+                  <small>{Number((monthlyStatusBreakdown.Sakit ?? 0).toFixed(1))}%</small>
                 </article>
                 <article className="presensi-rekap-card presensi-rekap-card--alpha">
                   <span>Alpha</span>
                   <strong>{monthlyStatusCounts.Alpha}</strong>
+                  <small>{Number((monthlyStatusBreakdown.Alpha ?? 0).toFixed(1))}%</small>
                 </article>
               </div>
 

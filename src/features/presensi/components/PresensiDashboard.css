@@ -260,6 +260,50 @@ select {
   color: #0f766e;
 }
 
+.presensi-stat-effective-box {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 7px 10px;
+  border-radius: 999px;
+  background: #eef2ff;
+  border: 1px solid rgba(99, 102, 241, 0.2);
+  color: #3730a3;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.presensi-stat-effective-box strong {
+  font-size: 0.8rem;
+  color: #312e81;
+}
+
+.presensi-stat-meta--sub {
+  margin-top: 6px;
+  color: #475569;
+}
+
+.presensi-stat-breakdown {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  margin-top: 8px;
+}
+
+.presensi-stat-breakdown-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: #f1f5f9;
+  color: #334155;
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
 .presensi-mode-switcher {
   display: flex;
   gap: 12px;
@@ -532,7 +576,7 @@ select {
 
 .presensi-rekap-stats {
   display: grid;
-  grid-template-columns: repeat(3, minmax(160px, 1fr));
+  grid-template-columns: repeat(4, minmax(150px, 1fr));
   gap: 14px;
 }
 
@@ -560,6 +604,12 @@ select {
   color: #0f172a;
 }
 
+.presensi-rekap-card small {
+  font-size: 0.72rem;
+  color: #475569;
+  font-weight: 700;
+}
+
 .presensi-rekap-card--hadir {
   background: #ecfdf5;
   border-color: rgba(34, 197, 94, 0.18);
@@ -568,6 +618,11 @@ select {
 .presensi-rekap-card--izin {
   background: #eff6ff;
   border-color: rgba(59, 130, 246, 0.18);
+}
+
+.presensi-rekap-card--sakit {
+  background: #fff7ed;
+  border-color: rgba(245, 158, 11, 0.18);
 }
 
 .presensi-rekap-card--alpha {

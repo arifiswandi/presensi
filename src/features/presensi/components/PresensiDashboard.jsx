@@ -226,7 +226,7 @@ export default function PresensiDashboard({ user, onLogout }) {
       const payload = {
         tanggal: selectedDate,
         kelas: selectedClass,
-        absensiData: students.map((student) => ({
+        presensiData: students.map((student) => ({
           nis: student.nis,
           nama: student.name,
           status: student.status,
@@ -279,7 +279,7 @@ export default function PresensiDashboard({ user, onLogout }) {
               <strong>{effectiveDaysInMonth} hari</strong>
             </div>
             <small className="presensi-stat-meta">Bulan {monthLabel}</small>
-            <small className="presensi-stat-meta presensi-stat-meta--sub">Berdasarkan data absensi</small>
+            <small className="presensi-stat-meta presensi-stat-meta--sub">Berdasarkan data presensi</small>
             <div className="presensi-stat-breakdown">
               {Object.entries(monthlyStatusBreakdown).map(([status, value]) => (
                 <span key={status} className="presensi-stat-breakdown-item">

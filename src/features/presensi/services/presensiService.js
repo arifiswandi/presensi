@@ -41,7 +41,7 @@ export const fetchPresensiStudents = async () => {
 
 export const fetchPresensiStatusByDate = async ({ tanggal, kelas }) => {
   try {
-    const data = await postToGas({ action: 'getAbsensiByDate', tanggal, kelas }, 'Memuat status presensi');
+    const data = await postToGas({ action: 'getPresensiByDate', tanggal, kelas }, 'Memuat status presensi');
 
     if (data.success === false) {
       throw new Error(data.message || 'Gagal memuat status presensi.');
@@ -80,12 +80,10 @@ export const fetchMonthlySummary = async ({ kelas, bulan, tahun }) => {
 
 export const savePresensi = async (payload = {}) => {
   const normalizedPayload = {
-    action: 'simpanAbsensi',
+    action: 'simpanPresensi',
     tanggal: payload.tanggal,
     kelas: payload.kelas,
-    absensiData: Array.isArray(payload.absensiData)
-      ? payload.absensiData
-      : (Array.isArray(payload.presensiData) ? payload.presensiData : []),
+    presensiData: Array.isArray(payload.presensiData) ? payload.presensiData : [],
   };
 
   const data = await postToGas(normalizedPayload, 'Simpan data presensi');

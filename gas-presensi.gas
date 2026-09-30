@@ -218,11 +218,11 @@ function normalizeStatus(value) {
   return statusMap[normalized] || normalizeText(value) || 'Hadir';
 }
 
-function buildAbsensiKey(tanggal, kelas, nis) {
+function buildPresensiKey(tanggal, kelas, nis) {
   return `${normalizeDateValue(tanggal)}|${normalizeText(kelas)}|${normalizeNis(nis)}`;
 }
 
-function findExistingAbsensiRow(rows, tanggal, kelas, nis) {
+function findExistingPresensiRow(rows, tanggal, kelas, nis) {
   const targetDate = normalizeDateValue(tanggal);
   const targetClass = normalizeText(kelas);
   const targetNis = normalizeNis(nis);
@@ -264,7 +264,7 @@ function getSiswaData(ss) {
     }));
 }
 
-function simpanAbsensi(ss, payload) {
+function simpanPresensi(ss, payload) {
   if (!payload || !payload.tanggal || !payload.kelas) {
     return { success: false, message: 'Tanggal dan kelas wajib diisi.' };
   }
@@ -272,9 +272,7 @@ function simpanAbsensi(ss, payload) {
   const sheet = getOrCreateSheet(ss, 'Presensi');
   ensureHeaderRow(sheet, ['timestamp', 'tanggal', 'kelas', 'nis', 'nama', 'status']);
 
-  const attendanceList = Array.isArray(payload.absensiData)
-    ? payload.absensiData
-    : (Array.isArray(payload.presensiData) ? payload.presensiData : []);
+  const attendanceList = Array.isArray(payload.presensiData) ? payload.presensiData : [];
 
   if (!attendanceList.length) {
     return { success: false, message: 'Tidak ada data presensi yang dikirim.' };
@@ -297,14 +295,14 @@ function simpanAbsensi(ss, payload) {
     const nis = normalizeNis(item.nis);
     const nama = normalizeText(item.nama);
     const status = normalizeStatus(item.status || 'Hadir');
-    const key = buildAbsensiKey(normalizedTanggal, normalizedKelas, nis);
+    const key = buildPresensiKey(normalizedTanggal, normalizedKelas, nis);
 
     if (seen.has(key)) {
       return;
     }
     seen.add(key);
 
-    const existingRowIndex = findExistingAbsensiRow(rows, normalizedTanggal, normalizedKelas, nis);
+    const existingRowIndex = findExistingPresensiRow(rows, normalizedTanggal, normalizedKelas, nis);
     const rowData = [
       formattedTimestamp,
       normalizedTanggal,
@@ -330,7 +328,7 @@ function simpanAbsensi(ss, payload) {
   };
 }
 
-function getAbsensiByDate(ss, params) {
+function getPresensiByDate(ss, params) {
   const tanggal = normalizeDateValue(params && params.tanggal ? params.tanggal : '');
   const kelas = normalizeText(params && params.kelas ? params.kelas : '');
 
@@ -369,7 +367,7 @@ function getAbsensiByDate(ss, params) {
   return { success: true, data: statusByNis };
 }
 
-function cleanupDuplicateAbsensi(ss) {
+function cleanupDuplicatePresensi(ss) {
   const sheet = getOrCreateSheet(ss, 'Presensi');
   const values = sheet.getDataRange().getValues();
 
@@ -397,7 +395,7 @@ function cleanupDuplicateAbsensi(ss) {
       return;
     }
 
-    const key = buildAbsensiKey(tanggal, kelas, nis);
+    const key = buildPresensiKey(tanggal, kelas, nis);
     const absoluteRow = index + 2;
 
     if (lastRowByKey.has(key)) {
@@ -435,7 +433,7 @@ function getRekapData(ss, params) {
     return { success: false, message: 'Parameter kelas, bulan, dan tahun wajib diisi.' };
   }
 
-  cleanupDuplicateAbsensi(ss);
+  cleanupDuplicatePresensi(ss);
 
   const sheetSiswa = getOrCreateSheet(ss, 'Siswa');
   const dataSiswa = sheetSiswa.getDataRange().getValues();
@@ -487,11 +485,11 @@ function getRekapData(ss, params) {
     }
 
     const tanggal = normalizeDateValue(row[1]);
-    const kelasAbsensi = normalizeText(row[2]);
+    const kelasPresensi = normalizeText(row[2]);
     const nis = normalizeNis(row[3]);
     const status = normalizeStatus(row[5]);
 
-    if (!tanggal || !kelasAbsensi || !nis || !status) {
+    if (!tanggal || !kelasPresensi || !nis || !status) {
       return;
     }
 
@@ -500,7 +498,7 @@ function getRekapData(ss, params) {
       return;
     }
 
-    if (kelasAbsensi !== normalizeText(kelas)) {
+    if (kelasPresensi !== normalizeText(kelas)) {
       return;
     }
 
@@ -512,7 +510,7 @@ function getRekapData(ss, params) {
       return;
     }
 
-    const key = buildAbsensiKey(tanggal, kelasAbsensi, nis);
+    const key = buildPresensiKey(tanggal, kelasPresensi, nis);
     if (uniqueKeys.has(key)) {
       return;
     }
@@ -534,7 +532,7 @@ function doGet(e) {
     const spreadsheetTarget = getRequestSpreadsheetTarget(
       params,
       action === 'getSiswa' ? 'siswa' : (
-        ['simpanAbsensi', 'getRekap', 'getAbsensiByDate', 'cleanupDuplicateAbsensi'].includes(action)
+        ['simpanPresensi', 'getRekap', 'getPresensiByDate', 'cleanupDuplicatePresensi'].includes(action)
           ? 'monthly'
           : 'default'
       )
@@ -549,12 +547,12 @@ function doGet(e) {
       return responseJSON(getRekapData(ss, params));
     }
 
-    if (action === 'getAbsensiByDate') {
-      return responseJSON(getAbsensiByDate(ss, params));
+    if (action === 'getPresensiByDate') {
+      return responseJSON(getPresensiByDate(ss, params));
     }
 
-    if (action === 'cleanupDuplicateAbsensi') {
-      return responseJSON(cleanupDuplicateAbsensi(ss));
+    if (action === 'cleanupDuplicatePresensi') {
+      return responseJSON(cleanupDuplicatePresensi(ss));
     }
 
     return responseJSON({ success: false, message: 'Aksi GET tidak valid.' });
@@ -574,7 +572,7 @@ function doPost(e) {
     const spreadsheetTarget = getRequestSpreadsheetTarget(
       payload,
       action === 'getSiswa' ? 'siswa' : (
-        ['simpanAbsensi', 'getRekap', 'getAbsensiByDate', 'cleanupDuplicateAbsensi'].includes(action)
+        ['simpanPresensi', 'getRekap', 'getPresensiByDate', 'cleanupDuplicatePresensi'].includes(action)
           ? 'monthly'
           : 'default'
       )
@@ -585,20 +583,20 @@ function doPost(e) {
       return responseJSON({ success: true, data: getSiswaData(ss) });
     }
 
-    if (action === 'simpanAbsensi') {
-      return responseJSON(simpanAbsensi(ss, payload));
+    if (action === 'simpanPresensi') {
+      return responseJSON(simpanPresensi(ss, payload));
     }
 
     if (action === 'getRekap') {
       return responseJSON(getRekapData(ss, payload));
     }
 
-    if (action === 'getAbsensiByDate') {
-      return responseJSON(getAbsensiByDate(ss, payload));
+    if (action === 'getPresensiByDate') {
+      return responseJSON(getPresensiByDate(ss, payload));
     }
 
-    if (action === 'cleanupDuplicateAbsensi') {
-      return responseJSON(cleanupDuplicateAbsensi(ss));
+    if (action === 'cleanupDuplicatePresensi') {
+      return responseJSON(cleanupDuplicatePresensi(ss));
     }
 
     return responseJSON({ success: false, message: 'Aksi POST tidak valid.' });

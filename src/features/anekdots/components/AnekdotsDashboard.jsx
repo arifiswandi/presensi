@@ -3,24 +3,15 @@ import { Link } from 'react-router-dom';
 import './AnekdotsDashboard.css';
 import { exportWorkbookAsExcel } from '../utils/exportExcel';
 import { mapExcelRowToRecord } from '../utils/excelImport';
+import { INITIAL_ANEKDOT_FORM } from '../constants';
 import {
   fetchAnekdots,
   createAnekdot,
   updateAnekdot,
   deleteAnekdot,
   importAnekdotsFromExcel,
-} from '../../../services/anekdotService';
+} from '../services';
 import AnekdotFormModal from './AnekdotFormModal';
-
-const INITIAL_ANEKDOT_FORM = {
-  ID: '',
-  Tanggal: '',
-  NamaSiswa: '',
-  Kelas: '',
-  Kejadian: '',
-  Penanganan: '',
-  Keterangan: '',
-};
 
 function StatCard({ label, value, meta }) {
   return (

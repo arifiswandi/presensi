@@ -1,24 +1,8 @@
 import React from 'react';
-import DashboardStatCard from './components/DashboardStatCard';
-import DashboardFeatureCard from './components/DashboardFeatureCard';
+import DashboardStatCard from './DashboardStatCard';
+import DashboardFeatureCard from './DashboardFeatureCard';
+import { FEATURE_ITEMS } from '../constants';
 import './Dashboard.css';
-
-const features = [
-  {
-    to: '/presensi',
-    title: 'Presensi',
-    description: 'Kelola data kehadiran dan monitor status siswa secara cepat.',
-    accent: '#2563eb',
-    badge: 'Attendance',
-  },
-  {
-    to: '/anekdot',
-    title: 'Anekdot',
-    description: 'Catat kejadian siswa, penanganan, dan rekam data perilaku secara lengkap.',
-    accent: '#7c3aed',
-    badge: 'Behavior',
-  },
-];
 
 export default function Dashboard({ user, onLogout }) {
   return (
@@ -54,7 +38,7 @@ export default function Dashboard({ user, onLogout }) {
         </section>
 
         <section className="dashboard-feature-grid">
-          {features.map((feature) => (
+          {FEATURE_ITEMS.map((feature) => (
             <DashboardFeatureCard key={feature.to} feature={feature} />
           ))}
         </section>

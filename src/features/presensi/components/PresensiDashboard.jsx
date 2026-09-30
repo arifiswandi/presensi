@@ -2,23 +2,17 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import './PresensiDashboard.css';
 import {
+  ATTENDANCE_RATE,
+  ATTENDANCE_OPTIONS,
+  STATUS_CLASS_MAP,
+  TOTAL_SESSIONS,
+} from '../constants';
+import {
   fetchMonthlySummary,
   fetchPresensiStudents,
   fetchPresensiStatusByDate,
   savePresensi,
-} from '../../../services/presensiService';
-
-const ATTENDANCE_RATE = 72.7;
-const TOTAL_SESSIONS = 6;
-
-const ATTENDANCE_OPTIONS = ['Hadir', 'Izin', 'Sakit', 'Alpha'];
-
-const STATUS_CLASS_MAP = {
-  Hadir: 'presensi-status--hadir',
-  Izin: 'presensi-status--izin',
-  Sakit: 'presensi-status--sakit',
-  Alpha: 'presensi-status--alpha',
-};
+} from '../services';
 
 export default function PresensiDashboard({ user, onLogout }) {
   const today = new Date().toISOString().slice(0, 10);

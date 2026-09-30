@@ -4,8 +4,8 @@ import LoginPage from './pages/LoginPage';
 import DashboardPage from './pages/DashboardPage';
 import AnekdotPage from './pages/AnekdotPage';
 import { PresensiDashboard } from './features/presensi';
-import { postToGas } from './services/gasAnekdotService';
-import { useStoredUser } from './hooks/useStoredUser';
+import { useStoredUser } from './features/auth';
+import { postToGas } from './features/anekdots/services';
 
 export default function App() {
   const [user, setUser] = useStoredUser();

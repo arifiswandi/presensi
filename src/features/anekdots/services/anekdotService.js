@@ -39,7 +39,7 @@ export const deleteAnekdot = async (postToGas, id) => {
 };
 
 export const importAnekdotsFromExcel = async (postToGas, file, mapRowToRecord) => {
-  const { readWorkbookRowsFromFile } = await import('../features/anekdots/utils/importExcel');
+  const { readWorkbookRowsFromFile } = await import('../utils/importExcel');
   const rows = await readWorkbookRowsFromFile(file);
   const normalizedRows = rows
     .map(mapRowToRecord)

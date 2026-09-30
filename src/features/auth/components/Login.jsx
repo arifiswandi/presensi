@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { loginUser } from '../services';
 import './Login.css';
 
 export default function Login({ onLogin, postToGas }) {
@@ -11,13 +12,8 @@ export default function Login({ onLogin, postToGas }) {
     setLoading(true);
 
     try {
-      const data = await postToGas({ action: 'login', username, password }, 'Login');
-
-      if (data.success) {
-        onLogin({ username: data.username, role: data.role });
-      } else {
-        alert(data.message || 'Login gagal.');
-      }
+      const user = await loginUser({ username, password }, postToGas);
+      onLogin(user);
     } catch (err) {
       console.error('Login error:', err);
       alert(`Terjadi kesalahan koneksi.\n${err.message}`);

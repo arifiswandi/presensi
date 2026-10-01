@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import './PresensiDashboard.css';
 import {
@@ -8,11 +8,21 @@ import {
 import {
   downloadSiswaImportTemplate,
   fetchMonthlySummary,
+  fetchPresensiByKelasBulan,
   fetchPresensiStudents,
-  fetchPresensiStatusByDate,
   importSiswaFromExcelFile,
   savePresensi,
 } from '../services';
+
+const VALID_ATTENDANCE_STATUSES = ['Hadir', 'Izin', 'Sakit', 'Alpha'];
+
+const normalizeStudentStatus = (value) => {
+  if (!value || !VALID_ATTENDANCE_STATUSES.includes(value)) {
+    return 'Belum diisi';
+  }
+
+  return value;
+};
 
 export default function PresensiDashboard({ user, onLogout }) {
   const today = new Date().toISOString().slice(0, 10);
@@ -27,67 +37,89 @@ export default function PresensiDashboard({ user, onLogout }) {
   const [isRefreshingClassData, setIsRefreshingClassData] = useState(false);
   const studentFileInputRef = useRef(null);
   const [loadError, setLoadError] = useState('');
+  const pendingClassFetchesRef = useRef(new Map());
+  const studentsByClassRef = useRef(studentsByClass);
+
+  useEffect(() => {
+    studentsByClassRef.current = studentsByClass;
+  }, [studentsByClass]);
 
   const classOptions = useMemo(() => Object.keys(studentsByClass), [studentsByClass]);
   const totalClasses = classOptions.length;
   const totalActiveStudents = Object.values(studentsByClass).reduce((sum, group) => sum + group.length, 0);
 
-  const refreshSelectedClassData = async ({ className = selectedClass, targetDate = selectedDate } = {}) => {
+  const refreshSelectedClassData = useCallback(async ({ className = selectedClass, targetDate = selectedDate } = {}) => {
     if (!className || !targetDate) {
       setStudents([]);
       setMonthlySummaryRows([]);
       return [];
     }
 
+    const requestKey = `${className}|${targetDate}`;
+    if (pendingClassFetchesRef.current.has(requestKey)) {
+      return pendingClassFetchesRef.current.get(requestKey);
+    }
+
     const dateObj = new Date(`${targetDate}T00:00:00`);
     const bulan = dateObj.getMonth() + 1;
     const tahun = dateObj.getFullYear();
 
-    try {
-      setLoadError('');
-      setIsRefreshingClassData(true);
+    const requestPromise = (async () => {
+      try {
+        setLoadError('');
+        setIsRefreshingClassData(true);
 
-      const [statusByNis, summaryRows] = await Promise.all([
-        fetchPresensiStatusByDate({
-          tanggal: targetDate,
-          kelas: className,
-        }),
-        fetchMonthlySummary({
-          kelas: className,
-          bulan,
-          tahun,
-        }),
-      ]);
+        const [classMonthData, summaryRows] = await Promise.all([
+          fetchPresensiByKelasBulan({
+            kelas: className,
+            bulan,
+            tahun,
+          }),
+          fetchMonthlySummary({
+            kelas: className,
+            bulan,
+            tahun,
+          }),
+        ]);
 
-      const baseStudents = (studentsByClass[className] || []).map((student) => ({
-        ...student,
-        status: statusByNis[student.nis] || student.status || 'Hadir',
-      }));
+        const statusByNis = classMonthData?.[targetDate] || {};
+        const currentStudentsForClass = studentsByClassRef.current[className] || [];
 
-      setStudents(baseStudents);
-      setStudentsByClass((currentMap) => ({
-        ...currentMap,
-        [className]: baseStudents,
-      }));
-      setMonthlySummaryRows(summaryRows);
-      return baseStudents;
-    } catch (error) {
-      console.error('Gagal memuat data presensi kelas:', {
-        className,
-        targetDate,
-        error: error?.message || error,
-      });
+        const baseStudents = currentStudentsForClass.map((student) => ({
+          ...student,
+          status: normalizeStudentStatus(statusByNis[student.nis] || student.status),
+        }));
 
-      setLoadError('Gagal memuat data presensi dari spreadsheet.');
-      setStudents(studentsByClass[className] || []);
-      setMonthlySummaryRows([]);
-      return studentsByClass[className] || [];
-    } finally {
-      setIsRefreshingClassData(false);
-    }
-  };
+        setStudents(baseStudents);
+        setStudentsByClass((currentMap) => ({
+          ...currentMap,
+          [className]: baseStudents,
+        }));
+        setMonthlySummaryRows(summaryRows);
+        return baseStudents;
+      } catch (error) {
+        console.error('Gagal memuat data presensi kelas:', {
+          className,
+          targetDate,
+          error: error?.message || error,
+        });
 
-  const loadStudents = async () => {
+        setLoadError('Gagal memuat data presensi dari spreadsheet.');
+        const fallbackStudents = studentsByClassRef.current[className] || [];
+        setStudents(fallbackStudents);
+        setMonthlySummaryRows([]);
+        return fallbackStudents;
+      } finally {
+        setIsRefreshingClassData(false);
+        pendingClassFetchesRef.current.delete(requestKey);
+      }
+    })();
+
+    pendingClassFetchesRef.current.set(requestKey, requestPromise);
+    return requestPromise;
+  }, [selectedClass, selectedDate]);
+
+  const loadStudents = useCallback(async () => {
     try {
       setLoadError('');
       setIsRefreshingClassData(true);
@@ -108,7 +140,7 @@ export default function PresensiDashboard({ user, onLogout }) {
           id: student.id,
           nis: student.nis,
           name: student.name,
-          status: 'Hadir',
+          status: 'Belum diisi',
         });
         return acc;
       }, {});
@@ -132,14 +164,14 @@ export default function PresensiDashboard({ user, onLogout }) {
     } finally {
       setIsRefreshingClassData(false);
     }
-  };
+  }, [refreshSelectedClassData, selectedClass, selectedDate]);
 
   useEffect(() => {
     loadStudents();
     const onFocus = () => loadStudents();
     window.addEventListener('focus', onFocus);
     return () => window.removeEventListener('focus', onFocus);
-  }, []);
+  }, [loadStudents]);
 
   useEffect(() => {
     if (!selectedClass || !selectedDate) {
@@ -150,49 +182,27 @@ export default function PresensiDashboard({ user, onLogout }) {
     }
 
     let isCancelled = false;
-    const baseStudents = studentsByClass[selectedClass] || [];
+    const baseStudents = studentsByClassRef.current[selectedClass] || [];
 
     setStudents(baseStudents.map((student) => ({
       ...student,
-      status: student.status || 'Hadir',
+      status: normalizeStudentStatus(student.status),
     })));
     setIsRefreshingClassData(true);
 
     const fetchSelectionData = async () => {
       try {
         setLoadError('');
-
-        const dateObj = new Date(`${selectedDate}T00:00:00`);
-        const bulan = dateObj.getMonth() + 1;
-        const tahun = dateObj.getFullYear();
-
-        const [statusByNis, summaryRows] = await Promise.all([
-          fetchPresensiStatusByDate({
-            tanggal: selectedDate,
-            kelas: selectedClass,
-          }),
-          fetchMonthlySummary({
-            kelas: selectedClass,
-            bulan,
-            tahun,
-          }),
-        ]);
+        const updatedStudents = await refreshSelectedClassData({
+          className: selectedClass,
+          targetDate: selectedDate,
+        });
 
         if (isCancelled) {
           return;
         }
 
-        const updatedStudents = baseStudents.map((student) => ({
-          ...student,
-          status: statusByNis[student.nis] || student.status || 'Hadir',
-        }));
-
         setStudents(updatedStudents);
-        setStudentsByClass((currentMap) => ({
-          ...currentMap,
-          [selectedClass]: updatedStudents,
-        }));
-        setMonthlySummaryRows(summaryRows);
       } catch (error) {
         if (isCancelled) {
           return;
@@ -219,7 +229,7 @@ export default function PresensiDashboard({ user, onLogout }) {
       isCancelled = true;
       setIsRefreshingClassData(false);
     };
-  }, [selectedClass, selectedDate]);
+  }, [refreshSelectedClassData, selectedClass, selectedDate]);
 
   const monthLabel = new Date(selectedDate).toLocaleDateString('id-ID', {
     month: 'long',
@@ -580,40 +590,47 @@ export default function PresensiDashboard({ user, onLogout }) {
                     </tr>
                   </thead>
                   <tbody>
-                    {students.map((student, index) => (
-                      <tr key={student.id}>
-                        <td>{index + 1}</td>
-                        <td>{student.nis}</td>
-                        <td>
-                          <strong>{student.name}</strong>
-                        </td>
-                        <td>
-                          <div className="presensi-option-group">
-                            {ATTENDANCE_OPTIONS.map((option) => {
-                              const isSelected = student.status === option;
+                    {students.map((student, index) => {
+                      const statusLabel = normalizeStudentStatus(student.status);
 
-                              return (
-                                <button
-                                  key={`${student.id}-${option}`}
-                                  type="button"
-                                  className={
-                                    isSelected
-                                      ? `presensi-option active ${STATUS_CLASS_MAP[option]}`
-                                      : `presensi-option ${STATUS_CLASS_MAP[option]}`
-                                  }
-                                  onClick={() => handleUpdateStatus(student.id, option)}
-                                >
-                                  <span className="presensi-option-inner">
-                                    {isSelected && <span className="presensi-option-check">✓</span>}
-                                    <span>{option}</span>
-                                  </span>
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
+                      return (
+                        <tr key={student.id}>
+                          <td>{index + 1}</td>
+                          <td>{student.nis}</td>
+                          <td>
+                            <strong>{student.name}</strong>
+                          </td>
+                          <td>
+                            <div className="presensi-option-group">
+                              <div className="presensi-status-label" aria-live="polite">
+                                {statusLabel}
+                              </div>
+                              {ATTENDANCE_OPTIONS.map((option) => {
+                                const isSelected = student.status === option;
+
+                                return (
+                                  <button
+                                    key={`${student.id}-${option}`}
+                                    type="button"
+                                    className={
+                                      isSelected
+                                        ? `presensi-option active ${STATUS_CLASS_MAP[option]}`
+                                        : `presensi-option ${STATUS_CLASS_MAP[option]}`
+                                    }
+                                    onClick={() => handleUpdateStatus(student.id, option)}
+                                  >
+                                    <span className="presensi-option-inner">
+                                      {isSelected && <span className="presensi-option-check">✓</span>}
+                                      <span>{option}</span>
+                                    </span>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>

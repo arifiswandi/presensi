@@ -121,6 +121,31 @@ export const fetchPresensiStatusByDate = async ({ tanggal, kelas }) => {
   }
 };
 
+export const fetchPresensiByKelasBulan = async ({ kelas, bulan, tahun }) => {
+  try {
+    const data = await postToGas(
+      { action: 'getPresensiByKelasBulan', kelas, bulan, tahun },
+      'Memuat data presensi per kelas dan bulan'
+    );
+
+    if (data.success === false) {
+      throw new Error(data.message || 'Gagal memuat data presensi per kelas dan bulan.');
+    }
+
+    return data.data || {};
+  } catch (error) {
+    console.error('fetchPresensiByKelasBulan failed:', {
+      kelas,
+      bulan,
+      tahun,
+      error: error?.message || error,
+    });
+    throw error;
+  }
+};
+
+export const fetchPresensiKelasBulan = fetchPresensiByKelasBulan;
+
 export const fetchMonthlySummary = async ({ kelas, bulan, tahun }) => {
   try {
     const data = await postToGas({ action: 'getRekap', kelas, bulan, tahun }, 'Memuat rekap bulanan');

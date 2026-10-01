@@ -13,8 +13,16 @@ function coerceDateValue(dateValue) {
   }
 
   if (dateValue && typeof dateValue === 'object') {
-    const candidateYear = Number(dateValue.year ?? dateValue.Year ?? dateValue.y ?? 0);
-    const candidateMonth = Number(dateValue.month ?? dateValue.Month ?? dateValue.m ?? 0);
+    const directDate = dateValue.tanggal || dateValue.date || dateValue.Date || dateValue.value;
+    if (directDate) {
+      const parsedDirect = new Date(directDate);
+      if (!Number.isNaN(parsedDirect.getTime())) {
+        return parsedDirect;
+      }
+    }
+
+    const candidateYear = Number(dateValue.year ?? dateValue.Year ?? dateValue.y ?? dateValue.tahun ?? dateValue.Tahun ?? 0);
+    const candidateMonth = Number(dateValue.month ?? dateValue.Month ?? dateValue.m ?? dateValue.bulan ?? dateValue.Bulan ?? 0);
 
     if (Number.isFinite(candidateYear) && candidateYear > 0 && Number.isFinite(candidateMonth) && candidateMonth >= 1 && candidateMonth <= 12) {
       return new Date(candidateYear, candidateMonth - 1, 1);
@@ -78,6 +86,25 @@ function getAcademicYear(dateValue) {
   const endYear = startYear + 1;
 
   return `${startYear}-${endYear}`;
+}
+
+function getAcademicSemester(dateValue) {
+  const sourceDate = coerceDateValue(dateValue);
+  const month = sourceDate.getMonth() + 1;
+  return month >= 1 && month <= 6 ? 'Genap' : 'Ganjil';
+}
+
+function normalizeClassKey(value) {
+  const raw = normalizeText(value).replace(/\s+/g, ' ');
+  if (!raw) {
+    return 'UMUM';
+  }
+
+  return raw
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_+|_+$/g, '') || 'UMUM';
 }
 
 function getOrCreateFolderByName(folderName, parentFolder) {
@@ -187,6 +214,35 @@ function getOrCreateSiswaSpreadsheet(dateValue) {
   return ss;
 }
 
+function getOrCreateClassSpreadsheet(kelas, dateValue) {
+  const normalizedKelas = normalizeText(kelas);
+  const classKey = normalizeClassKey(normalizedKelas);
+  const academicYear = getAcademicYear(dateValue);
+  const semester = getAcademicSemester(dateValue);
+  const spreadsheetName = `${PRESENSI_FILE_PREFIX}${classKey}_${academicYear}_${semester}`;
+  const targetFolder = getAcademicYearFolder(dateValue);
+
+  const existingFile = getPrimarySpreadsheetFileByName(targetFolder, spreadsheetName);
+  if (existingFile) {
+    const ss = SpreadsheetApp.openById(existingFile.getId());
+    const sheet = getOrCreateSheet(ss, 'Presensi');
+    ensureHeaderRow(sheet, ['timestamp', 'tanggal', 'kelas', 'nis', 'nama', 'status']);
+    return ss;
+  }
+
+  const newSpreadsheet = SpreadsheetApp.create(spreadsheetName);
+  const createdFile = DriveApp.getFileById(newSpreadsheet.getId());
+
+  if (createdFile.getParents().next().getId() !== targetFolder.getId()) {
+    createdFile.moveTo(targetFolder);
+  }
+
+  const ss = SpreadsheetApp.openById(createdFile.getId());
+  const sheet = getOrCreateSheet(ss, 'Presensi');
+  ensureHeaderRow(sheet, ['timestamp', 'tanggal', 'kelas', 'nis', 'nama', 'status']);
+  return ss;
+}
+
 function getSpreadsheet(spreadsheetTarget, dateValue) {
   const normalizedTarget = (spreadsheetTarget == null ? '' : String(spreadsheetTarget).trim());
   const defaultId = getDefaultSpreadsheetId();
@@ -205,6 +261,10 @@ function getSpreadsheet(spreadsheetTarget, dateValue) {
 
   if (normalizedTarget === 'siswa') {
     return getOrCreateSiswaSpreadsheet(dateValue);
+  }
+
+  if (normalizedTarget === 'kelas' || normalizedTarget === 'class' || normalizedTarget === 'classroom') {
+    return getOrCreateClassSpreadsheet(dateValue && (dateValue.kelas || dateValue.className) ? (dateValue.kelas || dateValue.className) : '', dateValue || new Date());
   }
 
   if (/^\d{4}-\d{2}$/.test(normalizedTarget)) {
@@ -230,9 +290,30 @@ function getRequestSpreadsheetTarget(data, fallback) {
     data.spreadsheet_name ||
     data.spreadsheetTarget ||
     data.monthly ||
+    data.target ||
     fallback ||
     'default'
   );
+}
+
+function resolveTargetSpreadsheet(data, action) {
+  const target = getRequestSpreadsheetTarget(data, 'default');
+
+  if (target === 'kelas' || target === 'class' || target === 'classroom') {
+    const kelas = data && (data.kelas || data.className || data.class || '');
+    return getOrCreateClassSpreadsheet(kelas, data || new Date());
+  }
+
+  if (data && typeof data === 'object' && (data.kelas || data.className || data.class)) {
+    const kelas = data.kelas || data.className || data.class;
+    const classTargetActions = ['simpanPresensi', 'getPresensiByDate', 'getRekap', 'getPresensiByKelasBulan', 'getPresensiKelasBulan'];
+
+    if (classTargetActions.includes(action)) {
+      return getOrCreateClassSpreadsheet(kelas, data || new Date());
+    }
+  }
+
+  return getSpreadsheet(target, data && (data.tanggal || data.date || data.bulan));
 }
 
 function responseJSON(payload) {
@@ -346,6 +427,67 @@ function normalizeStatus(value) {
   };
 
   return statusMap[normalized] || normalizeText(value) || 'Hadir';
+}
+
+function buildPresensiStatusCacheKey(kelas, tanggal) {
+  return `presensi-status:${normalizeText(kelas).toLowerCase()}:${normalizeDateValue(tanggal)}`;
+}
+
+function buildRekapCacheKey(kelas, bulan, tahun) {
+  const normalizedKelas = normalizeText(kelas).toLowerCase();
+  return `presensi-rekap:${normalizedKelas}:${Number(tahun) || new Date().getFullYear()}-${String(Number(bulan) || 1).padStart(2, '0')}`;
+}
+
+function getCachedJson(cacheKey, ttlSeconds, loader) {
+  if (!cacheKey) {
+    return loader();
+  }
+
+  try {
+    const cache = CacheService.getScriptCache();
+    const cached = cache.get(cacheKey);
+    if (cached) {
+      try {
+        return JSON.parse(cached);
+      } catch (error) {
+        cache.remove(cacheKey);
+      }
+    }
+  } catch (error) {
+    // ignore cache issues and proceed with direct load
+  }
+
+  const freshValue = loader();
+
+  if (freshValue !== undefined) {
+    try {
+      const cache = CacheService.getScriptCache();
+      cache.put(cacheKey, JSON.stringify(freshValue), ttlSeconds);
+    } catch (error) {
+      // ignore cache write issues
+    }
+  }
+
+  return freshValue;
+}
+
+function invalidatePresensiCachesForClass(kelas, tanggal) {
+  const normalizedKelas = normalizeText(kelas);
+  const cache = CacheService.getScriptCache();
+  const dateValue = normalizeDateValue(tanggal);
+
+  if (normalizedKelas) {
+    cache.remove(buildPresensiStatusCacheKey(normalizedKelas, dateValue));
+
+    if (dateValue) {
+      const dateObj = new Date(dateValue + 'T00:00:00');
+      if (!Number.isNaN(dateObj.getTime())) {
+        const bulan = dateObj.getMonth() + 1;
+        const tahun = dateObj.getFullYear();
+        cache.remove(buildRekapCacheKey(normalizedKelas, bulan, tahun));
+      }
+    }
+  }
 }
 
 function buildPresensiKey(tanggal, kelas, nis) {
@@ -495,72 +637,90 @@ function simpanPresensi(ss, payload) {
     return { success: false, message: 'Tidak ada data presensi yang dikirim.' };
   }
 
-  const savedAt = new Date();
-  const formattedTimestamp = Utilities.formatDate(savedAt, Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss');
-  const normalizedTanggal = normalizeDateValue(payload.tanggal);
-  const normalizedKelas = normalizeText(payload.kelas);
-  const seen = new Set();
-  const existingRowIndexByKey = new Map();
-  let savedCount = 0;
+  const lock = LockService.getScriptLock();
+  lock.waitLock(15000);
 
-  const rows = sheet.getDataRange().getValues();
+  try {
+    const savedAt = new Date();
+    const formattedTimestamp = Utilities.formatDate(savedAt, Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss');
+    const normalizedTanggal = normalizeDateValue(payload.tanggal);
+    const normalizedKelas = normalizeText(payload.kelas);
+    const seen = new Set();
+    const existingRowIndexByKey = new Map();
+    let savedCount = 0;
 
-  rows.slice(1).forEach((row, index) => {
-    if (!row || row.length < 6) {
-      return;
+    const rows = sheet.getDataRange().getValues();
+
+    rows.slice(1).forEach((row, index) => {
+      if (!row || row.length < 6) {
+        return;
+      }
+
+      const rowDate = normalizeDateValue(row[1]);
+      const rowKelas = normalizeText(row[2]);
+      const rowNis = normalizeNis(row[3]);
+
+      if (!rowDate || !rowKelas || !rowNis) {
+        return;
+      }
+
+      existingRowIndexByKey.set(buildPresensiKey(rowDate, rowKelas, rowNis), index + 2);
+    });
+
+    const batchRows = [];
+
+    attendanceList.forEach((item) => {
+      if (!item || !item.nis) {
+        return;
+      }
+
+      const nis = normalizeNis(item.nis);
+      const nama = normalizeText(item.nama);
+      const status = normalizeStatus(item.status || 'Hadir');
+      const key = buildPresensiKey(normalizedTanggal, normalizedKelas, nis);
+
+      if (seen.has(key)) {
+        return;
+      }
+      seen.add(key);
+
+      const rowData = [
+        formattedTimestamp,
+        normalizedTanggal,
+        normalizedKelas,
+        nis,
+        nama,
+        status,
+      ];
+
+      const existingRowIndex = existingRowIndexByKey.get(key) || 0;
+
+      if (existingRowIndex > 0) {
+        sheet.getRange(existingRowIndex, 1, 1, rowData.length).setValues([rowData]);
+      } else {
+        batchRows.push(rowData);
+      }
+
+      savedCount += 1;
+    });
+
+    if (batchRows.length) {
+      if (sheet.getLastRow() === 0) {
+        sheet.getRange(1, 1, 1, 6).setValues([['timestamp', 'tanggal', 'kelas', 'nis', 'nama', 'status']]);
+      }
+      sheet.getRange(sheet.getLastRow() + 1, 1, batchRows.length, 6).setValues(batchRows);
     }
 
-    const rowDate = normalizeDateValue(row[1]);
-    const rowKelas = normalizeText(row[2]);
-    const rowNis = normalizeNis(row[3]);
+    invalidatePresensiCachesForClass(normalizedKelas, normalizedTanggal);
 
-    if (!rowDate || !rowKelas || !rowNis) {
-      return;
-    }
-
-    existingRowIndexByKey.set(buildPresensiKey(rowDate, rowKelas, rowNis), index + 2);
-  });
-
-  attendanceList.forEach((item) => {
-    if (!item || !item.nis) {
-      return;
-    }
-
-    const nis = normalizeNis(item.nis);
-    const nama = normalizeText(item.nama);
-    const status = normalizeStatus(item.status || 'Hadir');
-    const key = buildPresensiKey(normalizedTanggal, normalizedKelas, nis);
-
-    if (seen.has(key)) {
-      return;
-    }
-    seen.add(key);
-
-    const rowData = [
-      formattedTimestamp,
-      normalizedTanggal,
-      normalizedKelas,
-      nis,
-      nama,
-      status,
-    ];
-
-    const existingRowIndex = existingRowIndexByKey.get(key) || 0;
-
-    if (existingRowIndex > 0) {
-      sheet.getRange(existingRowIndex, 1, 1, rowData.length).setValues([rowData]);
-    } else {
-      sheet.appendRow(rowData);
-    }
-
-    savedCount += 1;
-  });
-
-  return {
-    success: true,
-    message: `Data presensi berhasil disimpan (${savedCount} siswa).`,
-    savedCount,
-  };
+    return {
+      success: true,
+      message: `Data presensi berhasil disimpan (${savedCount} siswa).`,
+      savedCount,
+    };
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 function getPresensiByDate(ss, params) {
@@ -571,35 +731,39 @@ function getPresensiByDate(ss, params) {
     return { success: false, message: 'Tanggal dan kelas wajib diisi.' };
   }
 
-  const sheet = getOrCreateSheet(ss, 'Presensi');
-  const rows = sheet.getDataRange().getValues();
+  const cacheKey = buildPresensiStatusCacheKey(kelas, tanggal);
 
-  if (rows.length <= 1) {
-    return { success: true, data: {} };
-  }
+  return getCachedJson(cacheKey, 300, () => {
+    const sheet = getOrCreateSheet(ss, 'Presensi');
+    const rows = sheet.getDataRange().getValues();
 
-  const statusByNis = {};
-
-  rows.slice(1).forEach((row) => {
-    if (!row || row.length < 6) {
-      return;
+    if (rows.length <= 1) {
+      return { success: true, data: {} };
     }
 
-    const rowDate = normalizeDateValue(row[1]);
-    const rowKelas = normalizeText(row[2]);
-    const rowNis = normalizeNis(row[3]);
-    const status = normalizeStatus(row[5]);
+    const statusByNis = {};
 
-    if (!rowDate || !rowKelas || !rowNis) {
-      return;
-    }
+    rows.slice(1).forEach((row) => {
+      if (!row || row.length < 6) {
+        return;
+      }
 
-    if (rowDate === tanggal && rowKelas === kelas) {
-      statusByNis[rowNis] = status;
-    }
+      const rowDate = normalizeDateValue(row[1]);
+      const rowKelas = normalizeText(row[2]);
+      const rowNis = normalizeNis(row[3]);
+      const status = normalizeStatus(row[5]);
+
+      if (!rowDate || !rowKelas || !rowNis) {
+        return;
+      }
+
+      if (rowDate === tanggal && rowKelas === kelas) {
+        statusByNis[rowNis] = status;
+      }
+    });
+
+    return { success: true, data: statusByNis };
   });
-
-  return { success: true, data: statusByNis };
 }
 
 function cleanupDuplicatePresensi(ss) {
@@ -668,100 +832,158 @@ function getRekapData(ss, params) {
     return { success: false, message: 'Parameter kelas, bulan, dan tahun wajib diisi.' };
   }
 
-  cleanupDuplicatePresensi(ss);
+  const cacheKey = buildRekapCacheKey(kelas, bulan, tahun);
 
-  const siswaSpreadsheet = getOrCreateSiswaSpreadsheet({
-    year: tahun,
-    month: bulan,
+  return getCachedJson(cacheKey, 600, () => {
+    cleanupDuplicatePresensi(ss);
+
+    const siswaSpreadsheet = getOrCreateSiswaSpreadsheet({
+      year: tahun,
+      month: bulan,
+    });
+    const sheetSiswa = getOrCreateSheet(siswaSpreadsheet, 'Siswa');
+    const dataSiswa = sheetSiswa.getDataRange().getValues();
+    if (dataSiswa.length <= 1) {
+      return { success: true, data: [] };
+    }
+
+    const siswaKelas = dataSiswa.slice(1)
+      .filter((row) => normalizeText(row[1]) === normalizeText(kelas))
+      .map((row) => ({
+        nis: normalizeNis(row[2]),
+        nama: normalizeText(row[3]),
+      }))
+      .filter((row) => row.nis);
+
+    const sheetPresensi = getOrCreateSheet(ss, 'Presensi');
+    const dataPresensi = sheetPresensi.getDataRange().getValues();
+
+    if (dataPresensi.length <= 1) {
+      return { success: true, data: siswaKelas.map((siswa) => ({
+        nis: siswa.nis,
+        nama: siswa.nama,
+        Hadir: 0,
+        Izin: 0,
+        Sakit: 0,
+        Alpha: 0,
+        Total: 0,
+      })) };
+    }
+
+    const rekapMap = {};
+    siswaKelas.forEach((siswa) => {
+      rekapMap[siswa.nis] = {
+        nis: siswa.nis,
+        nama: siswa.nama,
+        Hadir: 0,
+        Izin: 0,
+        Sakit: 0,
+        Alpha: 0,
+        Total: 0,
+      };
+    });
+
+    const uniqueKeys = new Set();
+
+    dataPresensi.slice(1).forEach((row) => {
+      if (!row || row.length < 6) {
+        return;
+      }
+
+      const tanggal = normalizeDateValue(row[1]);
+      const kelasPresensi = normalizeText(row[2]);
+      const nis = normalizeNis(row[3]);
+      const status = normalizeStatus(row[5]);
+
+      if (!tanggal || !kelasPresensi || !nis || !status) {
+        return;
+      }
+
+      const dateValue = new Date(tanggal + 'T00:00:00');
+      if (Number.isNaN(dateValue.getTime())) {
+        return;
+      }
+
+      if (kelasPresensi !== normalizeText(kelas)) {
+        return;
+      }
+
+      if (dateValue.getMonth() + 1 !== bulan || dateValue.getFullYear() !== tahun) {
+        return;
+      }
+
+      if (!rekapMap[nis]) {
+        return;
+      }
+
+      const key = buildPresensiKey(tanggal, kelasPresensi, nis);
+      if (uniqueKeys.has(key)) {
+        return;
+      }
+      uniqueKeys.add(key);
+
+      if (rekapMap[nis][status] !== undefined) {
+        rekapMap[nis][status] += 1;
+        rekapMap[nis].Total += 1;
+      }
+    });
+
+    return { success: true, data: Object.values(rekapMap) };
   });
-  const sheetSiswa = getOrCreateSheet(siswaSpreadsheet, 'Siswa');
-  const dataSiswa = sheetSiswa.getDataRange().getValues();
-  if (dataSiswa.length <= 1) {
-    return { success: true, data: [] };
+}
+
+function getPresensiByKelasBulan(ss, params) {
+  const kelas = params && (params.kelas || params.className || params.class) ? String(params.kelas || params.className || params.class) : '';
+  const bulan = Number(params && params.bulan ? params.bulan : 0);
+  const tahun = Number(params && params.tahun ? params.tahun : 0);
+
+  if (!kelas || !bulan || !tahun) {
+    return { success: false, message: 'Parameter kelas, bulan, dan tahun wajib diisi.' };
   }
 
-  const siswaKelas = dataSiswa.slice(1)
-    .filter((row) => normalizeText(row[1]) === normalizeText(kelas))
-    .map((row) => ({
-      nis: normalizeNis(row[2]),
-      nama: normalizeText(row[3]),
-    }))
-    .filter((row) => row.nis);
+  const cacheKey = buildRekapCacheKey(kelas, bulan, tahun);
 
-  const sheetPresensi = getOrCreateSheet(ss, 'Presensi');
-  const dataPresensi = sheetPresensi.getDataRange().getValues();
+  return getCachedJson(cacheKey, 300, () => {
+    const rows = ss.getDataRange().getValues();
 
-  if (dataPresensi.length <= 1) {
-    return { success: true, data: siswaKelas.map((siswa) => ({
-      nis: siswa.nis,
-      nama: siswa.nama,
-      Hadir: 0,
-      Izin: 0,
-      Sakit: 0,
-      Alpha: 0,
-      Total: 0,
-    })) };
-  }
+    if (rows.length <= 1) {
+      return { success: true, data: {} };
+    }
 
-  const rekapMap = {};
-  siswaKelas.forEach((siswa) => {
-    rekapMap[siswa.nis] = {
-      nis: siswa.nis,
-      nama: siswa.nama,
-      Hadir: 0,
-      Izin: 0,
-      Sakit: 0,
-      Alpha: 0,
-      Total: 0,
-    };
+    const result = {};
+    rows.slice(1).forEach((row) => {
+      if (!row || row.length < 6) {
+        return;
+      }
+
+      const tanggal = normalizeDateValue(row[1]);
+      const rowKelas = normalizeText(row[2]);
+      const nis = normalizeNis(row[3]);
+      const status = normalizeStatus(row[5]);
+
+      if (!tanggal || !rowKelas || !nis) {
+        return;
+      }
+
+      const dateValue = new Date(tanggal + 'T00:00:00');
+      if (Number.isNaN(dateValue.getTime())) {
+        return;
+      }
+
+      if (rowKelas !== normalizeText(kelas)) {
+        return;
+      }
+
+      if (dateValue.getMonth() + 1 !== bulan || dateValue.getFullYear() !== tahun) {
+        return;
+      }
+
+      result[tanggal] = result[tanggal] || {};
+      result[tanggal][nis] = status;
+    });
+
+    return { success: true, data: result };
   });
-
-  const uniqueKeys = new Set();
-
-  dataPresensi.slice(1).forEach((row) => {
-    if (!row || row.length < 6) {
-      return;
-    }
-
-    const tanggal = normalizeDateValue(row[1]);
-    const kelasPresensi = normalizeText(row[2]);
-    const nis = normalizeNis(row[3]);
-    const status = normalizeStatus(row[5]);
-
-    if (!tanggal || !kelasPresensi || !nis || !status) {
-      return;
-    }
-
-    const dateValue = new Date(tanggal + 'T00:00:00');
-    if (Number.isNaN(dateValue.getTime())) {
-      return;
-    }
-
-    if (kelasPresensi !== normalizeText(kelas)) {
-      return;
-    }
-
-    if (dateValue.getMonth() + 1 !== bulan || dateValue.getFullYear() !== tahun) {
-      return;
-    }
-
-    if (!rekapMap[nis]) {
-      return;
-    }
-
-    const key = buildPresensiKey(tanggal, kelasPresensi, nis);
-    if (uniqueKeys.has(key)) {
-      return;
-    }
-    uniqueKeys.add(key);
-
-    if (rekapMap[nis][status] !== undefined) {
-      rekapMap[nis][status] += 1;
-      rekapMap[nis].Total += 1;
-    }
-  });
-
-  return { success: true, data: Object.values(rekapMap) };
 }
 
 function resolveActionTarget(data, action) {
@@ -776,7 +998,7 @@ function resolveActionTarget(data, action) {
 
 function executeAction(data, action) {
   const spreadsheetTarget = resolveActionTarget(data, action);
-  const ss = getSpreadsheet(spreadsheetTarget, data && (data.tanggal || data.date || data.bulan));
+  const ss = resolveTargetSpreadsheet(data, action);
 
   if (action === 'getSiswa') {
     return responseJSON({ success: true, data: getSiswaData(ss) });
@@ -800,6 +1022,10 @@ function executeAction(data, action) {
 
   if (action === 'getPresensiByDate') {
     return responseJSON(getPresensiByDate(ss, data));
+  }
+
+  if (action === 'getPresensiByKelasBulan' || action === 'getPresensiKelasBulan') {
+    return responseJSON(getPresensiByKelasBulan(ss, data));
   }
 
   if (action === 'cleanupDuplicatePresensi') {

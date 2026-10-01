@@ -1,6 +1,8 @@
 export { default as PresensiDashboard } from './components/PresensiDashboard';
 export {
   fetchMonthlySummary,
+  fetchPresensiByKelasBulan,
+  fetchPresensiKelasBulan,
   fetchPresensiStudents,
   fetchPresensiStatusByDate,
   savePresensi,

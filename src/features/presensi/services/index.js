@@ -2,6 +2,8 @@ export { postToGas } from './gasPresensiService';
 export {
   fetchPresensiStudents,
   fetchPresensiStatusByDate,
+  fetchPresensiByKelasBulan,
+  fetchPresensiKelasBulan,
   fetchMonthlySummary,
   savePresensi,
   createSiswaSpreadsheet,

@@ -179,25 +179,32 @@ function getOrCreateSiswaSpreadsheet(dateValue) {
   const spreadsheetName = `${SISWA_FILE_PREFIX}${academicYear}`;
   const targetFolder = getAcademicYearFolder(dateValue);
 
-  const existingFile = getPrimarySpreadsheetFileByName(targetFolder, spreadsheetName);
-  if (existingFile) {
-    const ss = SpreadsheetApp.openById(existingFile.getId());
+  const lock = LockService.getScriptLock();
+  lock.waitLock(15000);
+
+  try {
+    const existingFile = getPrimarySpreadsheetFileByName(targetFolder, spreadsheetName);
+    if (existingFile) {
+      const ss = SpreadsheetApp.openById(existingFile.getId());
+      const sheet = getOrCreateSheet(ss, 'Siswa');
+      ensureHeaderRow(sheet, ['ID', 'KELAS', 'NIS', 'NAMA', 'L/P']);
+      return ss;
+    }
+
+    const newSpreadsheet = SpreadsheetApp.create(spreadsheetName);
+    const createdFile = DriveApp.getFileById(newSpreadsheet.getId());
+
+    if (createdFile.getParents().next().getId() !== targetFolder.getId()) {
+      createdFile.moveTo(targetFolder);
+    }
+
+    const ss = SpreadsheetApp.openById(createdFile.getId());
     const sheet = getOrCreateSheet(ss, 'Siswa');
     ensureHeaderRow(sheet, ['ID', 'KELAS', 'NIS', 'NAMA', 'L/P']);
     return ss;
+  } finally {
+    lock.releaseLock();
   }
-
-  const newSpreadsheet = SpreadsheetApp.create(spreadsheetName);
-  const createdFile = DriveApp.getFileById(newSpreadsheet.getId());
-
-  if (createdFile.getParents().next().getId() !== targetFolder.getId()) {
-    createdFile.moveTo(targetFolder);
-  }
-
-  const ss = SpreadsheetApp.openById(createdFile.getId());
-  const sheet = getOrCreateSheet(ss, 'Siswa');
-  ensureHeaderRow(sheet, ['ID', 'KELAS', 'NIS', 'NAMA', 'L/P']);
-  return ss;
 }
 
 function getOrCreateClassSpreadsheet(kelas, dateValue) {
@@ -208,25 +215,32 @@ function getOrCreateClassSpreadsheet(kelas, dateValue) {
   const spreadsheetName = `${PRESENSI_FILE_PREFIX}${classKey}_${academicYear}_${semester}`;
   const targetFolder = getAcademicYearFolder(dateValue);
 
-  const existingFile = getPrimarySpreadsheetFileByName(targetFolder, spreadsheetName);
-  if (existingFile) {
-    const ss = SpreadsheetApp.openById(existingFile.getId());
+  const lock = LockService.getScriptLock();
+  lock.waitLock(15000);
+
+  try {
+    const existingFile = getPrimarySpreadsheetFileByName(targetFolder, spreadsheetName);
+    if (existingFile) {
+      const ss = SpreadsheetApp.openById(existingFile.getId());
+      const sheet = getOrCreateSheet(ss, 'Presensi');
+      ensureHeaderRow(sheet, ['timestamp', 'tanggal', 'kelas', 'nis', 'nama', 'status']);
+      return ss;
+    }
+
+    const newSpreadsheet = SpreadsheetApp.create(spreadsheetName);
+    const createdFile = DriveApp.getFileById(newSpreadsheet.getId());
+
+    if (createdFile.getParents().next().getId() !== targetFolder.getId()) {
+      createdFile.moveTo(targetFolder);
+    }
+
+    const ss = SpreadsheetApp.openById(createdFile.getId());
     const sheet = getOrCreateSheet(ss, 'Presensi');
     ensureHeaderRow(sheet, ['timestamp', 'tanggal', 'kelas', 'nis', 'nama', 'status']);
     return ss;
+  } finally {
+    lock.releaseLock();
   }
-
-  const newSpreadsheet = SpreadsheetApp.create(spreadsheetName);
-  const createdFile = DriveApp.getFileById(newSpreadsheet.getId());
-
-  if (createdFile.getParents().next().getId() !== targetFolder.getId()) {
-    createdFile.moveTo(targetFolder);
-  }
-
-  const ss = SpreadsheetApp.openById(createdFile.getId());
-  const sheet = getOrCreateSheet(ss, 'Presensi');
-  ensureHeaderRow(sheet, ['timestamp', 'tanggal', 'kelas', 'nis', 'nama', 'status']);
-  return ss;
 }
 
 function getSpreadsheet(spreadsheetTarget, dateValue) {

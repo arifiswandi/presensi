@@ -290,19 +290,24 @@ function resolveTargetSpreadsheet(data, action) {
   }
 
   const target = getRequestSpreadsheetTarget(data, '');
+  const rawClassName = data && typeof data === 'object'
+    ? (data.kelas || data.className || data.class || data.classroom || data.kelasSiswa || '')
+    : '';
 
   if (target === 'kelas' || target === 'class' || target === 'classroom') {
-    const kelas = data && (data.kelas || data.className || data.class || '');
-    return getOrCreateClassSpreadsheet(kelas, dateForSpreadsheet);
+    return getOrCreateClassSpreadsheet(rawClassName, dateForSpreadsheet);
   }
 
-  if (data && typeof data === 'object' && (data.kelas || data.className || data.class)) {
-    const kelas = data.kelas || data.className || data.class;
-    const classTargetActions = ['simpanPresensi', 'getPresensiByDate', 'getRekap', 'getPresensiByKelasBulan', 'getPresensiKelasBulan'];
+  const classTargetActions = [
+    'simpanPresensi',
+    'getPresensiByDate',
+    'getRekap',
+    'getPresensiByKelasBulan',
+    'getPresensiKelasBulan',
+  ];
 
-    if (classTargetActions.includes(action)) {
-      return getOrCreateClassSpreadsheet(kelas, dateForSpreadsheet);
-    }
+  if (rawClassName && classTargetActions.includes(action)) {
+    return getOrCreateClassSpreadsheet(rawClassName, dateForSpreadsheet);
   }
 
   if (target === 'siswa') {

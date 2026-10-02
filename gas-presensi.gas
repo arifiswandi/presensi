@@ -225,35 +225,28 @@ function getOrCreateClassSpreadsheet(kelas, dateValue) {
 
 function getSpreadsheet(spreadsheetTarget, dateValue) {
   const normalizedTarget = (spreadsheetTarget == null ? '' : String(spreadsheetTarget).trim());
+  const normalizedLower = normalizedTarget.toLowerCase();
 
-  if (!normalizedTarget || normalizedTarget === 'default' || normalizedTarget === 'monthly' || normalizedTarget === 'presensi' || normalizedTarget === 'rekap') {
-    throw new Error('Route spreadsheet lama tidak diizinkan. Gunakan format Siswa_YYYY-YYYY atau Presensi_<KELAS>_YYYY-YYYY_Ganjil.');
+  if (!normalizedTarget) {
+    throw new Error('Target spreadsheet tidak boleh kosong. Gunakan format Siswa_YYYY-YYYY atau Presensi_<KELAS>_YYYY-YYYY_Ganjil.');
   }
 
-  if (normalizedTarget === 'siswa') {
+  if (normalizedLower === 'siswa') {
     return getOrCreateSiswaSpreadsheet(dateValue || new Date());
   }
 
-  if (normalizedTarget === 'kelas' || normalizedTarget === 'class' || normalizedTarget === 'classroom') {
+  if (normalizedLower === 'kelas' || normalizedLower === 'class' || normalizedLower === 'classroom') {
     const kelas = dateValue && (dateValue.kelas || dateValue.className || dateValue.class)
       ? (dateValue.kelas || dateValue.className || dateValue.class)
       : '';
     return getOrCreateClassSpreadsheet(kelas, dateValue || new Date());
   }
 
-  if (/^\d{4}-\d{2}$/.test(normalizedTarget)) {
-    throw new Error('Format spreadsheet bulanan dinonaktifkan. Gunakan Presensi_<KELAS>_YYYY-YYYY_Ganjil.');
+  if (normalizedLower === 'default' || normalizedLower === 'monthly' || normalizedLower === 'presensi' || normalizedLower === 'rekap' || /^\d{4}-\d{2}$/.test(normalizedTarget)) {
+    throw new Error('Route spreadsheet lama dan format bulanan tidak diizinkan. Gunakan Siswa_YYYY-YYYY atau Presensi_<KELAS>_YYYY-YYYY_Ganjil.');
   }
 
-  if (normalizedTarget.length >= 20) {
-    try {
-      return SpreadsheetApp.openById(normalizedTarget);
-    } catch (error) {
-      throw new Error('ID spreadsheet tidak valid atau tidak ditemukan.');
-    }
-  }
-
-  throw new Error('Target spreadsheet tidak valid. Gunakan format Siswa_YYYY-YYYY atau Presensi_<KELAS>_YYYY-YYYY_Ganjil.');
+  throw new Error('Target spreadsheet tidak valid. Gunakan Siswa_YYYY-YYYY atau Presensi_<KELAS>_YYYY-YYYY_Ganjil.');
 }
 
 function getRequestSpreadsheetTarget(data, fallback) {
@@ -271,17 +264,20 @@ function getRequestSpreadsheetTarget(data, fallback) {
     '';
 
   const normalizedRawTarget = normalizeText(rawTarget).toLowerCase();
-  const isLegacyTarget = ['default', 'monthly', 'presensi', 'rekap', 'bulan', 'classroom', 'kelas', 'class'].includes(normalizedRawTarget);
 
-  if (isLegacyTarget && ['kelas', 'class', 'classroom'].includes(normalizedRawTarget)) {
-    return normalizedRawTarget;
+  if (!normalizedRawTarget) {
+    return fallback || '';
   }
 
-  if (isLegacyTarget && normalizedRawTarget === 'siswa') {
+  if (normalizedRawTarget === 'siswa') {
     return 'siswa';
   }
 
-  return rawTarget || fallback || '';
+  if (normalizedRawTarget === 'kelas' || normalizedRawTarget === 'class' || normalizedRawTarget === 'classroom') {
+    return normalizedRawTarget;
+  }
+
+  return '';
 }
 
 function resolveTargetSpreadsheet(data, action) {
@@ -311,10 +307,6 @@ function resolveTargetSpreadsheet(data, action) {
 
   if (target === 'siswa') {
     return getOrCreateSiswaSpreadsheet(dateForSpreadsheet);
-  }
-
-  if (target && target !== 'default') {
-    return getSpreadsheet(target, dateForSpreadsheet);
   }
 
   throw new Error('Tidak ada route spreadsheet yang valid. Gunakan Siswa_YYYY-YYYY atau Presensi_<KELAS>_YYYY-YYYY_Ganjil.');

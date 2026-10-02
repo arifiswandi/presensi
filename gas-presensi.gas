@@ -440,6 +440,23 @@ function buildRekapCacheKey(kelas, bulan, tahun) {
   return `presensi-rekap:${normalizedKelas}:${Number(tahun) || new Date().getFullYear()}-${String(Number(bulan) || 1).padStart(2, '0')}`;
 }
 
+function buildPresensiKelasBulanCacheKey(kelas, bulan, tahun) {
+  const normalizedKelas = normalizeText(kelas).toLowerCase();
+  return `presensi-kelas-bulan:${normalizedKelas}:${Number(tahun) || new Date().getFullYear()}-${String(Number(bulan) || 1).padStart(2, '0')}`;
+}
+
+function invalidateSiswaCache(ss) {
+  if (!ss || !ss.getId) {
+    return;
+  }
+
+  try {
+    CacheService.getScriptCache().remove(`siswa:${ss.getId()}`);
+  } catch (error) {
+    // ignore cache invalidation failures
+  }
+}
+
 function getCachedJson(cacheKey, ttlSeconds, loader) {
   if (!cacheKey) {
     return loader();
@@ -473,6 +490,12 @@ function getCachedJson(cacheKey, ttlSeconds, loader) {
   return freshValue;
 }
 
+function getCachedSheetRows(sheet, cacheKey, ttlSeconds) {
+  return getCachedJson(cacheKey, ttlSeconds, () => {
+    return sheet.getDataRange().getValues();
+  });
+}
+
 function invalidatePresensiCachesForClass(kelas, tanggal) {
   const normalizedKelas = normalizeText(kelas);
   const cache = CacheService.getScriptCache();
@@ -487,6 +510,7 @@ function invalidatePresensiCachesForClass(kelas, tanggal) {
         const bulan = dateObj.getMonth() + 1;
         const tahun = dateObj.getFullYear();
         cache.remove(buildRekapCacheKey(normalizedKelas, bulan, tahun));
+        cache.remove(buildPresensiKelasBulanCacheKey(normalizedKelas, bulan, tahun));
       }
     }
   }
@@ -592,6 +616,7 @@ function importSiswaData(ss, payload) {
 
   const startRow = sheet.getLastRow() + 1;
   sheet.getRange(startRow, 1, newRows.length, 5).setValues(newRows);
+  invalidateSiswaCache(ss);
 
   return {
     success: true,
@@ -604,13 +629,15 @@ function getSiswaData(ss) {
   const sheet = getOrCreateSheet(ss, 'Siswa');
   ensureHeaderRow(sheet, ['ID', 'KELAS', 'NIS', 'NAMA', 'L/P']);
 
-  const rows = sheet.getDataRange().getValues();
-  if (rows.length <= 1) {
+  const cacheKey = `siswa:${ss.getId()}`;
+  const rows = getCachedSheetRows(sheet, cacheKey, 600);
+
+  if (!Array.isArray(rows) || rows.length <= 1) {
     return [];
   }
 
   return rows.slice(1)
-    .filter((row) => row.some((cell) => cell !== ''))
+    .filter((row) => row && Array.isArray(row) && row.some((cell) => String(cell || '').trim() !== ''))
     .map((row) => {
       const jenisKelamin = normalizeJenisKelamin(row[4]);
 
@@ -943,7 +970,7 @@ function getPresensiByKelasBulan(ss, params) {
     return { success: false, message: 'Parameter kelas, bulan, dan tahun wajib diisi.' };
   }
 
-  const cacheKey = buildRekapCacheKey(kelas, bulan, tahun);
+  const cacheKey = buildPresensiKelasBulanCacheKey(kelas, bulan, tahun);
 
   return getCachedJson(cacheKey, 300, () => {
     const rows = ss.getDataRange().getValues();

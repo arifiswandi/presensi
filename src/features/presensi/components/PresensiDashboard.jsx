@@ -24,8 +24,13 @@ const normalizeStudentStatus = (value) => {
   return value;
 };
 
+const getLocalDateString = (date = new Date()) => {
+  const local = new Date(date.getTime() - (date.getTimezoneOffset() * 60000));
+  return local.toISOString().slice(0, 10);
+};
+
 export default function PresensiDashboard({ user, onLogout }) {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = getLocalDateString();
   const [selectedDate, setSelectedDate] = useState(today);
   const [selectedClass, setSelectedClass] = useState('');
   const [activeTab, setActiveTab] = useState('harian');
@@ -39,16 +44,26 @@ export default function PresensiDashboard({ user, onLogout }) {
   const [loadError, setLoadError] = useState('');
   const pendingClassFetchesRef = useRef(new Map());
   const studentsByClassRef = useRef(studentsByClass);
+  const selectedClassRef = useRef(selectedClass);
+  const selectedDateRef = useRef(selectedDate);
 
   useEffect(() => {
     studentsByClassRef.current = studentsByClass;
   }, [studentsByClass]);
 
+  useEffect(() => {
+    selectedClassRef.current = selectedClass;
+  }, [selectedClass]);
+
+  useEffect(() => {
+    selectedDateRef.current = selectedDate;
+  }, [selectedDate]);
+
   const classOptions = useMemo(() => Object.keys(studentsByClass), [studentsByClass]);
   const totalClasses = classOptions.length;
   const totalActiveStudents = Object.values(studentsByClass).reduce((sum, group) => sum + group.length, 0);
 
-  const refreshSelectedClassData = useCallback(async ({ className = selectedClass, targetDate = selectedDate } = {}) => {
+  const refreshSelectedClassData = useCallback(async ({ className = selectedClassRef.current, targetDate = selectedDateRef.current } = {}) => {
     if (!className || !targetDate) {
       setStudents([]);
       setMonthlySummaryRows([]);
@@ -117,7 +132,7 @@ export default function PresensiDashboard({ user, onLogout }) {
 
     pendingClassFetchesRef.current.set(requestKey, requestPromise);
     return requestPromise;
-  }, [selectedClass, selectedDate]);
+  }, []);
 
   const loadStudents = useCallback(async () => {
     try {
@@ -149,9 +164,15 @@ export default function PresensiDashboard({ user, onLogout }) {
       setStudentsByClass(mapped);
 
       if (classKeys.length) {
-        const nextClass = classKeys.includes(selectedClass) ? selectedClass : classKeys[0];
-        setSelectedClass(nextClass);
-        await refreshSelectedClassData({ className: nextClass, targetDate: selectedDate });
+        const currentClass = selectedClassRef.current;
+        const currentDate = selectedDateRef.current;
+        const nextClass = classKeys.includes(currentClass) ? currentClass : classKeys[0];
+
+        if (selectedClassRef.current !== nextClass) {
+          setSelectedClass(nextClass);
+        }
+
+        await refreshSelectedClassData({ className: nextClass, targetDate: currentDate || today });
       } else {
         setSelectedClass('');
       }
@@ -164,7 +185,7 @@ export default function PresensiDashboard({ user, onLogout }) {
     } finally {
       setIsRefreshingClassData(false);
     }
-  }, [refreshSelectedClassData, selectedClass, selectedDate]);
+  }, [refreshSelectedClassData, today]);
 
   useEffect(() => {
     loadStudents();

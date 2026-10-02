@@ -1,11 +1,6 @@
 const PRESENSI_FOLDER_ID = '1kS9hXo_Eoeb4HgAoH8wtOSGSsKCl9udS';
 const PRESENSI_FILE_PREFIX = 'Presensi_';
 const SISWA_FILE_PREFIX = 'Siswa_';
-const SPREADSHEET_ID = PropertiesService.getScriptProperties().getProperty('PRESENSI_SPREADSHEET_ID') || '';
-
-function getDefaultSpreadsheetId() {
-  return PropertiesService.getScriptProperties().getProperty('PRESENSI_SPREADSHEET_ID') || SPREADSHEET_ID || '';
-}
 
 function coerceDateValue(dateValue) {
   if (dateValue instanceof Date) {
@@ -61,16 +56,6 @@ function coerceDateValue(dateValue) {
   }
 
   return new Date(dateValue || Date.now());
-}
-
-function getMonthlySpreadsheetKey(dateValue) {
-  const sourceDate = coerceDateValue(dateValue);
-
-  if (Number.isNaN(sourceDate.getTime())) {
-    return Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM');
-  }
-
-  return Utilities.formatDate(sourceDate, Session.getScriptTimeZone(), 'yyyy-MM');
 }
 
 function getAcademicYear(dateValue) {
@@ -160,15 +145,6 @@ function getPrimarySpreadsheetFileByName(folder, spreadsheetName) {
   return allFiles[0];
 }
 
-function getOrCreateMonthlySpreadsheet(dateValue) {
-  const defaultId = getDefaultSpreadsheetId();
-  if (defaultId) {
-    return SpreadsheetApp.openById(defaultId);
-  }
-
-  throw new Error('Pembuatan spreadsheet presensi bulanan dinonaktifkan. Gunakan format Presensi_<KELAS>_YYYY-YYYY_Ganjil.');
-}
-
 function ensureSiswaSpreadsheetReady(dateValue) {
   const seedDate = dateValue || new Date();
   return getOrCreateSiswaSpreadsheet(seedDate);
@@ -209,6 +185,10 @@ function getOrCreateSiswaSpreadsheet(dateValue) {
 
 function getOrCreateClassSpreadsheet(kelas, dateValue) {
   const normalizedKelas = normalizeText(kelas);
+  if (!normalizedKelas) {
+    throw new Error('Kelas wajib diisi untuk membuat atau membuka spreadsheet presensi.');
+  }
+
   const classKey = normalizeClassKey(normalizedKelas);
   const academicYear = getAcademicYear(dateValue);
   const semester = getAcademicSemester(dateValue);
@@ -245,46 +225,40 @@ function getOrCreateClassSpreadsheet(kelas, dateValue) {
 
 function getSpreadsheet(spreadsheetTarget, dateValue) {
   const normalizedTarget = (spreadsheetTarget == null ? '' : String(spreadsheetTarget).trim());
-  const defaultId = getDefaultSpreadsheetId();
 
-  if (!normalizedTarget || normalizedTarget === 'default') {
-    if (defaultId) {
-      return SpreadsheetApp.openById(defaultId);
-    }
-    throw new Error('Tidak ada spreadsheet default yang diizinkan. Gunakan Presensi_<KELAS>_YYYY-YYYY_Ganjil atau spreadsheet Siswa_....');
-  }
-
-  if (
-    normalizedTarget === 'monthly' ||
-    normalizedTarget === 'presensi' ||
-    normalizedTarget === 'rekap' ||
-    /^\d{4}-\d{2}$/.test(normalizedTarget)
-  ) {
-    throw new Error('Format presensi bulanan dinonaktifkan. Gunakan Presensi_<KELAS>_YYYY-YYYY_Ganjil.');
+  if (!normalizedTarget || normalizedTarget === 'default' || normalizedTarget === 'monthly' || normalizedTarget === 'presensi' || normalizedTarget === 'rekap') {
+    throw new Error('Route spreadsheet lama tidak diizinkan. Gunakan format Siswa_YYYY-YYYY atau Presensi_<KELAS>_YYYY-YYYY_Ganjil.');
   }
 
   if (normalizedTarget === 'siswa') {
-    return getOrCreateSiswaSpreadsheet(dateValue);
+    return getOrCreateSiswaSpreadsheet(dateValue || new Date());
   }
 
   if (normalizedTarget === 'kelas' || normalizedTarget === 'class' || normalizedTarget === 'classroom') {
-    return getOrCreateClassSpreadsheet(dateValue && (dateValue.kelas || dateValue.className) ? (dateValue.kelas || dateValue.className) : '', dateValue || new Date());
+    const kelas = dateValue && (dateValue.kelas || dateValue.className || dateValue.class)
+      ? (dateValue.kelas || dateValue.className || dateValue.class)
+      : '';
+    return getOrCreateClassSpreadsheet(kelas, dateValue || new Date());
+  }
+
+  if (/^\d{4}-\d{2}$/.test(normalizedTarget)) {
+    throw new Error('Format spreadsheet bulanan dinonaktifkan. Gunakan Presensi_<KELAS>_YYYY-YYYY_Ganjil.');
   }
 
   if (normalizedTarget.length >= 20) {
-    return SpreadsheetApp.openById(normalizedTarget);
+    try {
+      return SpreadsheetApp.openById(normalizedTarget);
+    } catch (error) {
+      throw new Error('ID spreadsheet tidak valid atau tidak ditemukan.');
+    }
   }
 
-  if (defaultId) {
-    return SpreadsheetApp.openById(defaultId);
-  }
-
-  throw new Error('Target spreadsheet presensi tidak valid. Gunakan format Presensi_<KELAS>_YYYY-YYYY_Ganjil.');
+  throw new Error('Target spreadsheet tidak valid. Gunakan format Siswa_YYYY-YYYY atau Presensi_<KELAS>_YYYY-YYYY_Ganjil.');
 }
 
 function getRequestSpreadsheetTarget(data, fallback) {
   if (!data || typeof data !== 'object') {
-    return fallback || 'default';
+    return fallback || '';
   }
 
   const rawTarget =
@@ -297,9 +271,17 @@ function getRequestSpreadsheetTarget(data, fallback) {
     '';
 
   const normalizedRawTarget = normalizeText(rawTarget).toLowerCase();
-  const isLegacyMonthlyTarget = ['monthly', 'presensi', 'rekap', 'default'].includes(normalizedRawTarget);
+  const isLegacyTarget = ['default', 'monthly', 'presensi', 'rekap', 'bulan', 'classroom', 'kelas', 'class'].includes(normalizedRawTarget);
 
-  return isLegacyMonthlyTarget ? (fallback || 'default') : (rawTarget || fallback || 'default');
+  if (isLegacyTarget && ['kelas', 'class', 'classroom'].includes(normalizedRawTarget)) {
+    return normalizedRawTarget;
+  }
+
+  if (isLegacyTarget && normalizedRawTarget === 'siswa') {
+    return 'siswa';
+  }
+
+  return rawTarget || fallback || '';
 }
 
 function resolveTargetSpreadsheet(data, action) {
@@ -311,7 +293,7 @@ function resolveTargetSpreadsheet(data, action) {
     return getOrCreateSiswaSpreadsheet(dateForSpreadsheet);
   }
 
-  const target = getRequestSpreadsheetTarget(data, 'default');
+  const target = getRequestSpreadsheetTarget(data, '');
 
   if (target === 'kelas' || target === 'class' || target === 'classroom') {
     const kelas = data && (data.kelas || data.className || data.class || '');
@@ -331,7 +313,11 @@ function resolveTargetSpreadsheet(data, action) {
     return getOrCreateSiswaSpreadsheet(dateForSpreadsheet);
   }
 
-  return getSpreadsheet(target, dateForSpreadsheet);
+  if (target && target !== 'default') {
+    return getSpreadsheet(target, dateForSpreadsheet);
+  }
+
+  throw new Error('Tidak ada route spreadsheet yang valid. Gunakan Siswa_YYYY-YYYY atau Presensi_<KELAS>_YYYY-YYYY_Ganjil.');
 }
 
 function responseJSON(payload) {
@@ -377,9 +363,15 @@ function ensureHeaderRow(sheet, headers) {
   }
 
   if (!hasExpectedHeader) {
-    const rowIndex = 1;
-    sheet.insertRowBefore(rowIndex);
-    sheet.getRange(rowIndex, 1, 1, headers.length).setValues([headers]);
+    const rowOneHasContent = firstRow.some((cell) => String(cell || '').trim() !== '');
+
+    if (!rowOneHasContent) {
+      targetRange.setValues([headers]);
+      return;
+    }
+
+    sheet.insertRowBefore(1);
+    sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
   }
 }
 
@@ -1004,32 +996,11 @@ function getPresensiByKelasBulan(ss, params) {
   });
 }
 
-function resolveActionTarget(data, action) {
-  if (!action) {
-    return 'siswa';
-  }
-
-  if (['getSiswa', 'createSiswaSpreadsheet', 'importSiswa'].includes(action)) {
-    return 'siswa';
-  }
-
-  if (data && typeof data === 'object' && (data.kelas || data.className || data.class)) {
-    return 'kelas';
-  }
-
-  if (['simpanPresensi', 'getRekap', 'getPresensiByDate', 'cleanupDuplicatePresensi'].includes(action)) {
-    return 'default';
-  }
-
-  return getRequestSpreadsheetTarget(data, 'default');
-}
-
 function executeAction(data, action) {
   if (!action || ['getSiswa', 'createSiswaSpreadsheet', 'importSiswa'].includes(action)) {
     ensureSiswaSpreadsheetReady(data && (data.tanggal || data.date || data.bulan || data.year || data.tahun) ? data : new Date());
   }
 
-  const spreadsheetTarget = resolveActionTarget(data, action);
   const ss = resolveTargetSpreadsheet(data, action);
 
   if (action === 'getSiswa') {

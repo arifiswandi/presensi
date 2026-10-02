@@ -1,7 +1,8 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
-const GAS_PROXY_TARGET = process.env.VITE_GAS_URL || 'https://script.google.com/macros/s/AKfycbx8uUhZCShJqr3uiOXeRcZTzZ59wQtzmC5O-4Npn13aKcyEwn2fwfLDxQWmyf6qZg/exec'
+const GAS_PROXY_TARGET = (typeof globalThis !== 'undefined' && globalThis.process?.env?.VITE_GAS_URL)
+  || 'https://script.google.com/macros/s/AKfycbx8uUhZCShJqr3uiOXeRcZTzZ59wQtzmC5O-4Npn13aKcyEwn2fwfLDxQWmyf6qZg/exec'
 
 // https://vite.dev/config/
 export default defineConfig({

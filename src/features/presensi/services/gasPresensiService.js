@@ -1,14 +1,27 @@
 const DEFAULT_GAS_DEPLOYMENT_URL = 'https://script.google.com/macros/s/AKfycbx8uUhZCShJqr3uiOXeRcZTzZ59wQtzmC5O-4Npn13aKcyEwn2fwfLDxQWmyf6qZg/exec';
 
-export const GAS_URL = (import.meta.env.VITE_GAS_URL && String(import.meta.env.VITE_GAS_URL).trim())
-  || (import.meta.env.DEV ? '/api/gas' : DEFAULT_GAS_DEPLOYMENT_URL);
+const normalizeGasUrl = (value) => {
+  const text = String(value || '').trim();
+  if (!text) {
+    return DEFAULT_GAS_DEPLOYMENT_URL;
+  }
+
+  return text.replace(/\/+$/, '');
+};
+
+const resolvedGasUrl = import.meta.env.DEV
+  ? '/api/gas'
+  : normalizeGasUrl(import.meta.env.VITE_GAS_URL || DEFAULT_GAS_DEPLOYMENT_URL);
+
+export const GAS_URL = normalizeGasUrl(resolvedGasUrl);
 
 export const postToGas = async (payload, actionLabel = 'permintaan') => {
   const response = await fetch(GAS_URL, {
     method: 'POST',
-    // headers: {
-    //   'Content-Type': 'application/json',
-    // },
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+    },
     body: JSON.stringify(payload),
   });
 

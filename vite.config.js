@@ -1,9 +1,10 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
-const GAS_PROXY_PRESENSI = (typeof globalThis !== 'undefined' && globalThis.process?.env?.VITE_GAS_PRESENSI_URL)
+const GAS_PROXY_PRESENSI = process.env.VITE_GAS_PRESENSI_URL
   || 'https://script.google.com/macros/s/AKfycbx8uUhZCShJqr3uiOXeRcZTzZ59wQtzmC5O-4Npn13aKcyEwn2fwfLDxQWmyf6qZg/exec'
-const GAS_PROXY_ANEKDOT = (typeof globalThis !== 'undefined' && globalThis.process?.env?.VITE_GAS_ANEKDOT_URL)
+
+const GAS_PROXY_ANEKDOT = process.env.VITE_GAS_ANEKDOT_URL
   || 'https://script.google.com/macros/s/AKfycby4No_Yd3lOZ90h4SnwFEohUD_99_q3khqsb8raPeUCQl7bX63R81FCjueejU--GP1O/exec'
 
 // https://vite.dev/config/

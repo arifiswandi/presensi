@@ -1,8 +1,11 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
-const GAS_PROXY_TARGET = (typeof globalThis !== 'undefined' && globalThis.process?.env?.VITE_GAS_URL)
+const GAS_PROXY_PRESENSI = (typeof globalThis !== 'undefined' && globalThis.process?.env?.VITE_GAS_PRESENSI_URL)
   || 'https://script.google.com/macros/s/AKfycbx8uUhZCShJqr3uiOXeRcZTzZ59wQtzmC5O-4Npn13aKcyEwn2fwfLDxQWmyf6qZg/exec'
+
+  const GAS_PROXY_ANEKDOT = (typeof globalThis !== 'undefined' && globalThis.process?.env?.VITE_GAS_ANEKDOT_URL)
+  || 'https://script.google.com/macros/s/AKfycby4No_Yd3lOZ90h4SnwFEohUD_99_q3khqsb8raPeUCQl7bX63R81FCjueejU--GP1O/exec'
 
 // https://vite.dev/config/
 export default defineConfig({
@@ -34,13 +37,13 @@ export default defineConfig({
     },
     proxy: {
       '/api/gas': {
-        target: GAS_PROXY_TARGET,
+        target: GAS_PROXY_PRESENSI,
         changeOrigin: true,
         secure: false,
         rewrite: (path) => path.replace(/^\/api\/gas/, '')
       },
       '/api/backend': {
-        target: 'https://script.google.com/macros/s/AKfycby4No_Yd3lOZ90h4SnwFEohUD_99_q3khqsb8raPeUCQl7bX63R81FCjueejU--GP1O/exec',
+        target: GAS_PROXY_ANEKDOT,
         changeOrigin: true,
         secure: false,
         rewrite: (path) => path.replace(/^\/api\/backend/, '')

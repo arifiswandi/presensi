@@ -115,10 +115,16 @@ export default function PresensiDashboard({ user, onLogout }) {
         const statusByNis = classMonthData?.[targetDate] || {};
         const currentStudentsForClass = studentsByClassRef.current[className] || [];
 
-        const baseStudents = currentStudentsForClass.map((student) => ({
-          ...student,
-          status: normalizeStudentStatus(statusByNis[student.nis] || student.status),
-        }));
+        const baseStudents = currentStudentsForClass.map((student) => {
+          const dateStatus = Object.prototype.hasOwnProperty.call(statusByNis, student.nis)
+            ? statusByNis[student.nis]
+            : '';
+
+          return {
+            ...student,
+            status: normalizeStudentStatus(dateStatus),
+          };
+        });
 
         setStudents((currentStudents) => {
           if (hasSameStudentList(currentStudents, baseStudents)) {

@@ -6,9 +6,9 @@ export const GAS_URL = (import.meta.env.VITE_GAS_URL && String(import.meta.env.V
 export const postToGas = async (payload, actionLabel = 'permintaan') => {
   const response = await fetch(GAS_URL, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
+    // headers: {
+    //   'Content-Type': 'application/json',
+    // },
     body: JSON.stringify(payload),
   });
 

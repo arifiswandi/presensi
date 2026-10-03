@@ -92,13 +92,41 @@ function normalizeClassKey(value) {
 
 function getOrCreateFolderByName(folderName, parentFolder) {
   const rootFolder = parentFolder || DriveApp.getRootFolder();
-  const folders = rootFolder.getFoldersByName(folderName);
+  const normalizedFolderName = String(folderName || '').trim();
 
-  if (folders.hasNext()) {
-    return folders.next();
+  if (!normalizedFolderName) {
+    throw new Error('Nama folder tidak boleh kosong.');
   }
 
-  return rootFolder.createFolder(folderName);
+  const lock = LockService.getScriptLock();
+  lock.waitLock(15000);
+
+  try {
+    const folders = rootFolder.getFoldersByName(normalizedFolderName);
+    const existingFolders = [];
+
+    while (folders.hasNext()) {
+      existingFolders.push(folders.next());
+    }
+
+    if (existingFolders.length > 0) {
+      return existingFolders[0];
+    }
+
+    try {
+      return rootFolder.createFolder(normalizedFolderName);
+    } catch (error) {
+      const retryFolders = rootFolder.getFoldersByName(normalizedFolderName);
+      if (retryFolders.hasNext()) {
+        return retryFolders.next();
+      }
+      throw error;
+    }
+  } finally {
+    if (lock.hasLock()) {
+      lock.releaseLock();
+    }
+  }
 }
 
 function getPresensiRootFolder() {

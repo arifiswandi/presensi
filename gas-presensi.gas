@@ -74,7 +74,14 @@ function getAcademicYear(dateValue) {
 }
 
 function getAcademicSemester(dateValue) {
-  return 'Ganjil';
+  const sourceDate = coerceDateValue(dateValue);
+
+  if (Number.isNaN(sourceDate.getTime())) {
+    return 'Ganjil';
+  }
+
+  const month = sourceDate.getMonth() + 1;
+  return month >= 7 ? 'Ganjil' : 'Genap';
 }
 
 function normalizeClassKey(value) {

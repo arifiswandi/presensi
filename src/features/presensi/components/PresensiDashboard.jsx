@@ -184,6 +184,7 @@ export default function PresensiDashboard({ user, onLogout }) {
       const studentRows = await fetchPresensiStudents({ tanggal: targetDate });
 
       if (!studentRows.length) {
+        studentsByClassRef.current = {};
         setStudentsByClass({});
         setStudents([]);
         setSelectedClass('');
@@ -204,6 +205,7 @@ export default function PresensiDashboard({ user, onLogout }) {
         return acc;
       }, {});
 
+      studentsByClassRef.current = mapped;
       const classKeys = Object.keys(mapped);
       setStudentsByClass(mapped);
 
@@ -224,6 +226,7 @@ export default function PresensiDashboard({ user, onLogout }) {
       lastStudentsLoadRef.current = Date.now();
     } catch (error) {
       console.error('Gagal memuat data siswa:', error);
+      studentsByClassRef.current = {};
       setLoadError('Gagal memuat daftar siswa dari server.');
       setStudentsByClass({});
       setStudents([]);

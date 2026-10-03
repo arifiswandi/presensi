@@ -51,6 +51,7 @@ export default function PresensiDashboard({ user, onLogout }) {
   const [students, setStudents] = useState([]);
   const [studentsByClass, setStudentsByClass] = useState({});
   const [monthlySummaryRows, setMonthlySummaryRows] = useState([]);
+  const [semesterSummaryRows, setSemesterSummaryRows] = useState([]);
   const [saving, setSaving] = useState(false);
   const [importingStudents, setImportingStudents] = useState(false);
   const [isRefreshingClassData, setIsRefreshingClassData] = useState(false);
@@ -61,6 +62,23 @@ export default function PresensiDashboard({ user, onLogout }) {
   const selectedClassRef = useRef(selectedClass);
   const selectedDateRef = useRef(selectedDate);
   const lastStudentsLoadRef = useRef(0);
+
+  const getSemesterConfig = useCallback((dateValue = selectedDateRef.current) => {
+    const dateObj = new Date(`${dateValue}T00:00:00`);
+    if (Number.isNaN(dateObj.getTime())) {
+      return { label: 'Ganjil', months: [7, 8, 9, 10, 11, 12], year: new Date().getFullYear() };
+    }
+
+    const month = dateObj.getMonth() + 1;
+    const isGanjil = month >= 7;
+    const year = dateObj.getFullYear();
+
+    return {
+      label: isGanjil ? 'Ganjil' : 'Genap',
+      months: isGanjil ? [7, 8, 9, 10, 11, 12] : [1, 2, 3, 4, 5, 6],
+      year,
+    };
+  }, []);
 
   useEffect(() => {
     studentsByClassRef.current = studentsByClass;
@@ -307,6 +325,73 @@ export default function PresensiDashboard({ user, onLogout }) {
     year: 'numeric',
   });
 
+  const semesterConfig = useMemo(() => getSemesterConfig(selectedDate), [getSemesterConfig, selectedDate]);
+  const semesterLabel = `${semesterConfig.label} ${semesterConfig.year}`;
+
+  useEffect(() => {
+    if (!selectedClass || !selectedDate) {
+      setSemesterSummaryRows([]);
+      return undefined;
+    }
+
+    let isCancelled = false;
+    const loadSemesterSummary = async () => {
+      try {
+        const monthSummaries = await Promise.all(
+          semesterConfig.months.map(async (bulan) => {
+            const rows = await fetchMonthlySummary({
+              kelas: selectedClass,
+              bulan,
+              tahun: semesterConfig.year,
+            });
+            return Array.isArray(rows) ? rows : [];
+          })
+        );
+
+        if (isCancelled) {
+          return;
+        }
+
+        const summaryMap = new Map();
+        monthSummaries.flat().forEach((row) => {
+          const key = row?.nis || row?.id || row?.nama || row?.name || '';
+          if (!key) {
+            return;
+          }
+
+          const existing = summaryMap.get(key) || {
+            nis: row?.nis || row?.id || '',
+            nama: row?.nama || row?.name || '',
+            Hadir: 0,
+            Izin: 0,
+            Sakit: 0,
+            Alpha: 0,
+            Total: 0,
+          };
+
+          existing.Hadir += Number(row?.Hadir ?? 0);
+          existing.Izin += Number(row?.Izin ?? 0);
+          existing.Sakit += Number(row?.Sakit ?? 0);
+          existing.Alpha += Number(row?.Alpha ?? 0);
+          existing.Total = existing.Hadir + existing.Izin + existing.Sakit + existing.Alpha;
+          summaryMap.set(key, existing);
+        });
+
+        setSemesterSummaryRows(Array.from(summaryMap.values()));
+      } catch (error) {
+        console.error('Gagal memuat rekap semester:', error);
+        if (!isCancelled) {
+          setSemesterSummaryRows([]);
+        }
+      }
+    };
+
+    loadSemesterSummary();
+    return () => {
+      isCancelled = true;
+    };
+  }, [selectedClass, selectedDate, semesterConfig]);
+
   const effectiveDaysInMonth = useMemo(() => {
     if (!selectedClass || !monthlySummaryRows.length) return 0;
 
@@ -347,6 +432,21 @@ export default function PresensiDashboard({ user, onLogout }) {
     return base;
   }, [monthlySummaryRows]);
 
+  const semesterStatusCounts = useMemo(() => {
+    const base = { Hadir: 0, Izin: 0, Sakit: 0, Alpha: 0 };
+
+    semesterSummaryRows.forEach((row) => {
+      Object.keys(base).forEach((status) => {
+        const value = Number(row?.[status] ?? 0);
+        if (!Number.isNaN(value)) {
+          base[status] += value;
+        }
+      });
+    });
+
+    return base;
+  }, [semesterSummaryRows]);
+
   const selectedClassStudentCount = Math.max(monthlySummaryRows.length || students.length || 1, 1);
   const effectiveAttendanceDenominator = monthLabel && monthlySummaryRows.length
     ? Math.max(selectedClassStudentCount * effectiveDaysInMonth, 1)
@@ -364,9 +464,25 @@ export default function PresensiDashboard({ user, onLogout }) {
     }, {});
   }, [effectiveAttendanceDenominator, monthlyStatusCounts]);
 
+  const semesterEffectiveAttendanceDenominator = semesterSummaryRows.length
+    ? Math.max(semesterSummaryRows.length * semesterConfig.months.length * 22, 1)
+    : Math.max(selectedClassStudentCount, 1);
+  const semesterStatusBreakdown = useMemo(() => {
+    const entries = Object.entries(semesterStatusCounts);
+
+    return entries.reduce((acc, [status, total]) => {
+      acc[status] = semesterEffectiveAttendanceDenominator ? (total / semesterEffectiveAttendanceDenominator) * 100 : 0;
+      return acc;
+    }, {});
+  }, [semesterEffectiveAttendanceDenominator, semesterStatusCounts]);
+
   const monthlyTableRows = useMemo(() => (
     activeTab === 'rekap' ? monthlySummaryRows : students
   ), [activeTab, monthlySummaryRows, students]);
+
+  const semesterTableRows = useMemo(() => (
+    activeTab === 'semester' ? semesterSummaryRows : []
+  ), [activeTab, semesterSummaryRows]);
 
   const handleUpdateStatus = (id, status) => {
     setStudents((currentStudents) =>
@@ -441,6 +557,7 @@ export default function PresensiDashboard({ user, onLogout }) {
   };
 
   const isMonthlySummary = activeTab === 'rekap';
+  const isSemesterSummary = activeTab === 'semester';
 
   return (
     <div className="presensi-page">
@@ -515,39 +632,58 @@ export default function PresensiDashboard({ user, onLogout }) {
           >
             Rekapitulasi Bulanan
           </button>
+          <button
+            type="button"
+            className={activeTab === 'semester' ? 'presensi-mode-button active' : 'presensi-mode-button'}
+            onClick={() => setActiveTab('semester')}
+          >
+            Rekap Per Semester
+          </button>
         </div>
 
         <main className="presensi-panel">
-          {isMonthlySummary ? (
+          {isMonthlySummary || isSemesterSummary ? (
             <div className="presensi-rekap-panel">
               <div className="presensi-rekap-header">
                 <div>
-                  <p className="presensi-rekap-eyebrow">Ringkasan Bulanan</p>
+                  <p className="presensi-rekap-eyebrow">
+                    {isSemesterSummary ? 'Ringkasan Semester' : 'Ringkasan Bulanan'}
+                  </p>
                   <h2 className="presensi-rekap-title">{selectedClass}</h2>
                 </div>
-                <span className="presensi-rekap-period">{monthLabel}</span>
+                <span className="presensi-rekap-period">
+                  {isSemesterSummary ? semesterLabel : monthLabel}
+                </span>
               </div>
 
               <div className="presensi-rekap-stats">
                 <article className="presensi-rekap-card presensi-rekap-card--hadir">
                   <span>Hadir</span>
-                  <strong>{monthlyStatusCounts.Hadir}</strong>
-                  <small>{Number((monthlyStatusBreakdown.Hadir ?? 0).toFixed(1))}%</small>
+                  <strong>{isSemesterSummary ? semesterStatusCounts.Hadir : monthlyStatusCounts.Hadir}</strong>
+                  <small>
+                    {Number(((isSemesterSummary ? semesterStatusBreakdown.Hadir : monthlyStatusBreakdown.Hadir) ?? 0).toFixed(1))}%
+                  </small>
                 </article>
                 <article className="presensi-rekap-card presensi-rekap-card--izin">
                   <span>Izin</span>
-                  <strong>{monthlyStatusCounts.Izin}</strong>
-                  <small>{Number((monthlyStatusBreakdown.Izin ?? 0).toFixed(1))}%</small>
+                  <strong>{isSemesterSummary ? semesterStatusCounts.Izin : monthlyStatusCounts.Izin}</strong>
+                  <small>
+                    {Number(((isSemesterSummary ? semesterStatusBreakdown.Izin : monthlyStatusBreakdown.Izin) ?? 0).toFixed(1))}%
+                  </small>
                 </article>
                 <article className="presensi-rekap-card presensi-rekap-card--sakit">
                   <span>Sakit</span>
-                  <strong>{monthlyStatusCounts.Sakit}</strong>
-                  <small>{Number((monthlyStatusBreakdown.Sakit ?? 0).toFixed(1))}%</small>
+                  <strong>{isSemesterSummary ? semesterStatusCounts.Sakit : monthlyStatusCounts.Sakit}</strong>
+                  <small>
+                    {Number(((isSemesterSummary ? semesterStatusBreakdown.Sakit : monthlyStatusBreakdown.Sakit) ?? 0).toFixed(1))}%
+                  </small>
                 </article>
                 <article className="presensi-rekap-card presensi-rekap-card--alpha">
                   <span>Alpha</span>
-                  <strong>{monthlyStatusCounts.Alpha}</strong>
-                  <small>{Number((monthlyStatusBreakdown.Alpha ?? 0).toFixed(1))}%</small>
+                  <strong>{isSemesterSummary ? semesterStatusCounts.Alpha : monthlyStatusCounts.Alpha}</strong>
+                  <small>
+                    {Number(((isSemesterSummary ? semesterStatusBreakdown.Alpha : monthlyStatusBreakdown.Alpha) ?? 0).toFixed(1))}%
+                  </small>
                 </article>
               </div>
 
@@ -563,7 +699,7 @@ export default function PresensiDashboard({ user, onLogout }) {
                     </tr>
                   </thead>
                   <tbody>
-                    {monthlyTableRows.map((student) => (
+                    {(isSemesterSummary ? semesterTableRows : monthlyTableRows).map((student) => (
                       <tr key={student.id ?? student.nis ?? student.nama ?? student.name}>
                         <td>{student.nama ?? student.name}</td>
                         <td>{Number(student.Hadir ?? 0)}</td>

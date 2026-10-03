@@ -90,6 +90,19 @@ function normalizeClassKey(value) {
     .replace(/^_+|_+$/g, '') || 'UMUM';
 }
 
+function canonicalizeClassName(value) {
+  const raw = normalizeText(value).toUpperCase();
+  if (!raw) {
+    return 'UMUM';
+  }
+
+  return raw.replace(/[^A-Z0-9]/g, '') || 'UMUM';
+}
+
+function classNamesMatch(leftValue, rightValue) {
+  return canonicalizeClassName(leftValue) === canonicalizeClassName(rightValue);
+}
+
 function getOrCreateFolderByName(folderName, parentFolder) {
   const rootFolder = parentFolder || DriveApp.getRootFolder();
   const normalizedFolderName = String(folderName || '').trim();
@@ -819,7 +832,7 @@ function getPresensiByDate(ss, params) {
         return;
       }
 
-      if (rowDate === tanggal && rowKelas === kelas) {
+      if (rowDate === tanggal && classNamesMatch(rowKelas, kelas)) {
         statusByNis[rowNis] = status;
       }
     });
@@ -909,8 +922,9 @@ function getRekapData(ss, params) {
       return { success: true, data: [] };
     }
 
+    const targetClassKey = canonicalizeClassName(kelas);
     const siswaKelas = dataSiswa.slice(1)
-      .filter((row) => normalizeText(row[1]) === normalizeText(kelas))
+      .filter((row) => canonicalizeClassName(row[1]) === targetClassKey)
       .map((row) => ({
         nis: normalizeNis(row[2]),
         nama: normalizeText(row[3]),
@@ -966,7 +980,7 @@ function getRekapData(ss, params) {
         return;
       }
 
-      if (kelasPresensi !== normalizeText(kelas)) {
+      if (!classNamesMatch(kelasPresensi, kelas)) {
         return;
       }
 
@@ -1032,7 +1046,7 @@ function getPresensiByKelasBulan(ss, params) {
         return;
       }
 
-      if (rowKelas !== normalizeText(kelas)) {
+      if (!classNamesMatch(rowKelas, kelas)) {
         return;
       }
 
@@ -1105,7 +1119,17 @@ function doGet(e) {
 function doPost(e) {
   try {
     const raw = (e && e.postData && e.postData.contents) ? e.postData.contents : '';
-    const payload = raw ? JSON.parse(raw) : {};
+    let payload = {};
+
+    if (raw) {
+      try {
+        payload = JSON.parse(raw);
+      } catch (error) {
+        const params = new URLSearchParams(raw);
+        payload = Object.fromEntries(params.entries());
+      }
+    }
+
     return executeAction(payload, payload.action || '');
   } catch (error) {
     return responseJSON({

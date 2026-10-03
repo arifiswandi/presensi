@@ -43,6 +43,10 @@ const normalizeRows = (value) => {
   return [];
 };
 
+const normalizeClassName = (value = '') => String(value ?? '')
+  .replace(/[^A-Za-z0-9]+/g, '')
+  .toUpperCase();
+
 const normalizeJenisKelamin = (value) => {
   const text = String(value ?? '').trim().toLowerCase();
 
@@ -73,12 +77,13 @@ const normalizeStudent = (item, index) => {
   const jenisKelamin = normalizeJenisKelamin(
     item?.jenisKelamin ?? item?.gender ?? item?.JenisKelamin ?? item?.jk ?? ''
   );
+  const kelas = normalizeClassName(item?.kelas ?? item?.Kelas ?? item?.kelasSiswa ?? item?.KelasSiswa ?? '');
 
   return {
-    id: item?.id ?? item?.nis ?? item?.NIS ?? `${item?.kelas ?? 'siswa'}-${index}`,
+    id: item?.id ?? item?.nis ?? item?.NIS ?? `${kelas || 'siswa'}-${index}`,
     nis: item?.nis ?? item?.NIS ?? String(index + 1),
     name: item?.nama ?? item?.name ?? item?.NamaSiswa ?? item?.Nama ?? 'Siswa',
-    kelas: item?.kelas ?? item?.Kelas ?? item?.kelasSiswa ?? item?.KelasSiswa ?? '',
+    kelas,
     jenisKelamin,
     gender: jenisKelamin,
     status: item?.status ?? '',
@@ -104,7 +109,8 @@ export const fetchPresensiStudents = async () => {
 
 export const fetchPresensiStatusByDate = async ({ tanggal, kelas }) => {
   try {
-    const data = await postToGas({ action: 'getPresensiByDate', tanggal, kelas }, 'Memuat status presensi');
+    const normalizedKelas = normalizeClassName(kelas);
+    const data = await postToGas({ action: 'getPresensiByDate', tanggal, kelas: normalizedKelas }, 'Memuat status presensi');
 
     if (data.success === false) {
       throw new Error(data.message || 'Gagal memuat status presensi.');
@@ -123,8 +129,9 @@ export const fetchPresensiStatusByDate = async ({ tanggal, kelas }) => {
 
 export const fetchPresensiByKelasBulan = async ({ kelas, bulan, tahun }) => {
   try {
+    const normalizedKelas = normalizeClassName(kelas);
     const data = await postToGas(
-      { action: 'getPresensiByKelasBulan', kelas, bulan, tahun },
+      { action: 'getPresensiByKelasBulan', kelas: normalizedKelas, bulan, tahun },
       'Memuat data presensi per kelas dan bulan'
     );
 
@@ -148,7 +155,8 @@ export const fetchPresensiKelasBulan = fetchPresensiByKelasBulan;
 
 export const fetchMonthlySummary = async ({ kelas, bulan, tahun }) => {
   try {
-    const data = await postToGas({ action: 'getRekap', kelas, bulan, tahun }, 'Memuat rekap bulanan');
+    const normalizedKelas = normalizeClassName(kelas);
+    const data = await postToGas({ action: 'getRekap', kelas: normalizedKelas, bulan, tahun }, 'Memuat rekap bulanan');
 
     if (data.success === false) {
       throw new Error(data.message || 'Gagal memuat rekap bulanan.');
@@ -170,7 +178,7 @@ export const savePresensi = async (payload = {}) => {
   const normalizedPayload = {
     action: 'simpanPresensi',
     tanggal: payload.tanggal,
-    kelas: payload.kelas,
+    kelas: normalizeClassName(payload.kelas),
     presensiData: Array.isArray(payload.presensiData) ? payload.presensiData : [],
   };
 

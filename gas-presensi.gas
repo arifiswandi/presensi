@@ -92,18 +92,11 @@ function normalizeClassKey(value) {
 
   return raw
     .toUpperCase()
-    .replace(/[^A-Z0-9]/g, '_')
-    .replace(/_+/g, '_')
-    .replace(/^_+|_+$/g, '') || 'UMUM';
+    .replace(/[^A-Z0-9]/g, '') || 'UMUM';
 }
 
 function canonicalizeClassName(value) {
-  const raw = normalizeText(value).toUpperCase();
-  if (!raw) {
-    return 'UMUM';
-  }
-
-  return raw.replace(/[^A-Z0-9]/g, '') || 'UMUM';
+  return normalizeClassKey(value);
 }
 
 function classNamesMatch(leftValue, rightValue) {

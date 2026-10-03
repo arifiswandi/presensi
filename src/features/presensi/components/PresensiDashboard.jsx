@@ -172,7 +172,7 @@ export default function PresensiDashboard({ user, onLogout }) {
     return requestPromise;
   }, []);
 
-  const loadStudents = useCallback(async ({ force = false } = {}) => {
+  const loadStudents = useCallback(async ({ force = false, targetDate = selectedDateRef.current } = {}) => {
     const now = Date.now();
     if (!force && now - lastStudentsLoadRef.current < 30000) {
       return;
@@ -181,7 +181,7 @@ export default function PresensiDashboard({ user, onLogout }) {
     try {
       setLoadError('');
       setIsRefreshingClassData(true);
-      const studentRows = await fetchPresensiStudents();
+      const studentRows = await fetchPresensiStudents({ tanggal: targetDate });
 
       if (!studentRows.length) {
         setStudentsByClass({});
@@ -209,14 +209,14 @@ export default function PresensiDashboard({ user, onLogout }) {
 
       if (classKeys.length) {
         const currentClass = selectedClassRef.current;
-        const currentDate = selectedDateRef.current;
+        const currentDate = targetDate || selectedDateRef.current || today;
         const nextClass = classKeys.includes(currentClass) ? currentClass : classKeys[0];
 
         if (selectedClassRef.current !== nextClass) {
           setSelectedClass(nextClass);
         }
 
-        await refreshSelectedClassData({ className: nextClass, targetDate: currentDate || today });
+        await refreshSelectedClassData({ className: nextClass, targetDate: currentDate });
       } else {
         setSelectedClass('');
       }
@@ -234,7 +234,7 @@ export default function PresensiDashboard({ user, onLogout }) {
   }, [refreshSelectedClassData, today]);
 
   useEffect(() => {
-    loadStudents({ force: true });
+    loadStudents({ force: true, targetDate: selectedDate });
     const onFocus = () => {
       const now = Date.now();
       const timeSinceLastRefresh = now - lastStudentsLoadRef.current;
@@ -242,13 +242,13 @@ export default function PresensiDashboard({ user, onLogout }) {
       const hasPendingRequest = pendingClassFetchesRef.current.size > 0;
 
       if (isTabStale && !hasPendingRequest) {
-        loadStudents({ force: true });
+        loadStudents({ force: true, targetDate: selectedDate });
       }
     };
 
     window.addEventListener('focus', onFocus);
     return () => window.removeEventListener('focus', onFocus);
-  }, [loadStudents]);
+  }, [loadStudents, selectedDate]);
 
   useEffect(() => {
     if (!selectedClass || !selectedDate) {

@@ -90,8 +90,8 @@ const normalizeStudent = (item, index) => {
   };
 };
 
-export const fetchPresensiStudents = async () => {
-  const data = await postToGas({ action: 'getSiswa' }, 'Memuat daftar siswa');
+export const fetchPresensiStudents = async ({ tanggal } = {}) => {
+  const data = await postToGas({ action: 'getSiswa', tanggal }, 'Memuat daftar siswa');
 
   if (data.success === false) {
     throw new Error(data.message || 'Gagal memuat daftar siswa.');
